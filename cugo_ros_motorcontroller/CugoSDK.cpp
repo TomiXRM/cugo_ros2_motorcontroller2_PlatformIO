@@ -1638,9 +1638,6 @@ void  ld2_encoder_reset() {
   cugo_prev_encoder_R = 0;
   cugo_start_count_R = 0;
   cugo_current_count_R = 0;
-
-  //delay(200);
-
 }
 
 void  ld2_set_feedback(unsigned char freq_index, unsigned char kindof_data) {  //freq 0:10[hz] 1:50[hz] 2:100[hz] kindof_data 1:Mode 2:CMD_RPM 4:CurrentRPM 8:AveCurrentRPM 128:EncorderData
@@ -1660,7 +1657,3 @@ void cugo_reset() {
     watchdog_reboot(0,0,0);    
     while (true);
 }
-
-/*
-
- */
