@@ -1604,26 +1604,25 @@ void  ld2_set_encorder(unsigned char frame[12]) {
   ld2_frame_to_short(frame, 2, &encoderL);
   ld2_frame_to_short(frame, 4, &encoderR);
 
-  if((int)cugo_prev_encoder_L > 0 && (int)encoderL < 0 && ((int)cugo_prev_encoder_L - (int)encoderL) > (CUGO_LD2_COUNT_MAX/2)){//オーバフローしている場合
-    cugo_current_count_L = cugo_current_count_L + CUGO_LD2_COUNT_MAX - (int)cugo_prev_encoder_L + (int)encoderL;
-  }else if((int)cugo_prev_encoder_L < 0 && (int)encoderL > 0 && ((int)encoderL - (int)cugo_prev_encoder_L)>(CUGO_LD2_COUNT_MAX/2)){//アンダーフローしている場合
-    cugo_current_count_L = cugo_current_count_L + CUGO_LD2_COUNT_MAX + (int)cugo_prev_encoder_L - (int)encoderL;
-  }else {//それ以外（通常時）
-    cugo_current_count_L = cugo_current_count_L + (int)encoderL - (int)cugo_prev_encoder_L;
+  int diff_L = encoderL - cugo_prev_encoder_L;
+  int diff_R = encoderR - cugo_prev_encoder_R;
+    // オーバーフロー処理
+  if (diff_L < -CUGO_LD2_COUNT_MAX/2) {
+    diff_L += CUGO_LD2_COUNT_MAX;
+  } else if (diff_L > CUGO_LD2_COUNT_MAX/2) {
+    diff_L -= CUGO_LD2_COUNT_MAX;
   }
-  cugo_current_encoder_L = cugo_current_encoder_L + (int)encoderL - (int)cugo_prev_encoder_L;
-  cugo_prev_encoder_L = encoderL;
 
-  if((int)cugo_prev_encoder_R > 0 && (int)encoderR < 0 && ((int)cugo_prev_encoder_R - (int)encoderR) > (CUGO_LD2_COUNT_MAX/2)){//オーバフローしている場合
-    cugo_current_count_R = cugo_current_count_R + CUGO_LD2_COUNT_MAX - (int)cugo_prev_encoder_R + (int)encoderR;
-  }else if((int)cugo_prev_encoder_R < 0 && (int)encoderR > 0 && ((int)encoderR - (int)cugo_prev_encoder_R)>(CUGO_LD2_COUNT_MAX/2)){//アンダーフローしている場合
-    cugo_current_count_R = cugo_current_count_R + CUGO_LD2_COUNT_MAX + (int)cugo_prev_encoder_R - (int)encoderR;
-  }else {//それ以外（通常時）
-    cugo_current_count_R = cugo_current_count_R + (int)encoderR - (int)cugo_prev_encoder_R;
-  }  
-  cugo_current_encoder_R = cugo_current_encoder_R + (int)encoderR - (int)cugo_prev_encoder_R;
-  cugo_prev_encoder_R = encoderR;
-  //Serial.println("L: "+String(current_encoder_L)+"R:  "+String(current_encoder_R));
+  if (diff_R < -CUGO_LD2_COUNT_MAX/2) {
+    diff_R += CUGO_LD2_COUNT_MAX;
+  } else if (diff_R > CUGO_LD2_COUNT_MAX/2) {
+    diff_R -= CUGO_LD2_COUNT_MAX;
+  }
+
+  cugo_current_count_L += diff_L;
+  cugo_current_count_R += diff_R;
+  cugo_prev_encoder_L = cugo_current_count_L;
+  cugo_prev_encoder_R = cugo_current_count_R;
 }
 
 void  ld2_encoder_reset() {

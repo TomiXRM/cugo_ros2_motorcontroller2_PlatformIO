@@ -1,10 +1,7 @@
 #include "CugoSDK.h"
 #include <Servo.h>
-#include <Ethernet2.h>
-#include <EthernetUdp2.h>
 #include <PacketSerial.h>
 
-// HEADERはUDP実装と共通（流用のため）
 #define SERIAL_BIN_BUFF_SIZE 64
 #define SERIAL_HEADER_SIZE 8
 uint8_t packetBinaryBufferSerial[SERIAL_HEADER_SIZE + SERIAL_BIN_BUFF_SIZE];
@@ -24,16 +21,10 @@ unsigned long long current_time = 0, prev_time_10ms = 0, prev_time_100ms, prev_t
 // FAIL SAFE COUNT
 int COM_FAIL_COUNT = 0;
 
-
 void stop_motor_immediately()
 {
-  //set_motorにしないのはセットすることでUDP受け取れないコマンドがリセットされてしまう。
-  //motor_controllers[0].setTargetRpm(0.0);
-  //motor_controllers[1].setTargetRpm(0.0);
-  //motor_direct_instructions(1500, 1500);
   cugo_rpm_direct_instructions(0, 0);
 }
-
 
 void check_failsafe()
 {
@@ -46,12 +37,10 @@ void check_failsafe()
   }
 }
 
-
 void job_10ms()
 {
   // nothing
 }
-
 
 void job_100ms()
 {
@@ -60,12 +49,10 @@ void job_100ms()
   ld2_get_cmd();
 }
 
-
 void job_1000ms()
 {
   //nothing
 }
-
 
 void write_float_to_buf(uint8_t* buf, const int TARGET, float val)
 {
@@ -73,13 +60,11 @@ void write_float_to_buf(uint8_t* buf, const int TARGET, float val)
   memmove(buf + TARGET, val_ptr, sizeof(float));
 }
 
-
 void write_int_to_buf(uint8_t* buf, const int TARGET, int val)
 {
   uint8_t* val_ptr = reinterpret_cast<uint8_t*>(&val);
   memmove(buf + TARGET, val_ptr, sizeof(int));
 }
-
 
 void write_bool_to_buf(uint8_t* buf, const int TARGET, bool val)
 {
@@ -87,13 +72,11 @@ void write_bool_to_buf(uint8_t* buf, const int TARGET, bool val)
   memmove(buf + TARGET, val_ptr, sizeof(bool));
 }
 
-
 float read_float_from_buf(uint8_t* buf, const int TARGET)
 {
   float val = *reinterpret_cast<float*>(buf + SERIAL_HEADER_SIZE + TARGET);
   return val;
 }
-
 
 int read_int_from_buf(uint8_t* buf, const int TARGET)
 {
@@ -101,13 +84,11 @@ int read_int_from_buf(uint8_t* buf, const int TARGET)
   return val;
 }
 
-
 bool read_bool_from_buf(uint8_t* buf, const int TARGET)
 {
   bool val = *reinterpret_cast<bool*>(buf + SERIAL_HEADER_SIZE + TARGET);
   return val;
 }
-
 
 uint8_t read_uint8_t_from_buf(uint8_t* buf, const int TARGET)
 {
@@ -115,14 +96,12 @@ uint8_t read_uint8_t_from_buf(uint8_t* buf, const int TARGET)
   return val;
 }
 
-
 uint16_t read_uint16_t_from_header(uint8_t* buf, const int TARGET)
 {
   if (TARGET >= SERIAL_HEADER_SIZE - 1) return 0;
   uint16_t val = *reinterpret_cast<uint16_t*>(buf + TARGET);
   return val;
 }
-
 
 void set_motor_cmd_binary(uint8_t* reciev_buf, int size)
 {
@@ -151,7 +130,6 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size)
   }
 }
 
-
 uint16_t calculate_checksum(const void* data, size_t size, size_t start = 0)
 {
   uint16_t checksum = 0;
@@ -167,7 +145,6 @@ uint16_t calculate_checksum(const void* data, size_t size, size_t start = 0)
   return ~checksum;
 }
 
-
 void create_serial_packet(uint8_t* packet, uint16_t* header, uint8_t* body)
 {
   size_t offset = 0;
@@ -175,7 +152,6 @@ void create_serial_packet(uint8_t* packet, uint16_t* header, uint8_t* body)
   offset += sizeof(uint8_t) * SERIAL_HEADER_SIZE;
   memmove(packet + offset, body, sizeof(uint8_t)*SERIAL_BIN_BUFF_SIZE);
 }
-
 
 void onSerialPacketReceived(const uint8_t* buffer, size_t size)
 {
@@ -217,19 +193,16 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size)
   packetSerial.send(send_packet, send_len);
 }
 
-
 void setup()
 {
-
-  cugo_switching_reset = false;
   //プロポでラジコンモード切替時に初期化したい場合はtrue、初期化しない場合はfalse 
+  cugo_switching_reset = false;
 
   cugo_init();//初期設定
   packetSerial.begin(115200);
   packetSerial.setStream(&Serial);
   packetSerial.setPacketHandler(&onSerialPacketReceived);
 }
-
 
 void loop()
 {
