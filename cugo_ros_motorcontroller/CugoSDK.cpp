@@ -1621,8 +1621,8 @@ void  ld2_set_encorder(unsigned char frame[12]) {
 
   cugo_current_count_L += diff_L;
   cugo_current_count_R += diff_R;
-  cugo_prev_encoder_L = cugo_current_count_L;
-  cugo_prev_encoder_R = cugo_current_count_R;
+  cugo_prev_encoder_L = encoderL;
+  cugo_prev_encoder_R = encoderR;
 }
 
 void  ld2_encoder_reset() {
