@@ -23,7 +23,6 @@ const long int cugo_ld2_index_tofreq[3] = { 10, 50, 100 };
 
 //初期化関数
 void cugo_init() {
-
   Serial.begin(115200, SERIAL_8N1);   //PCとの通信
   delay(1000);                        //LD-2起動待機
   Serial1.begin(115200, SERIAL_8N1);  //BLDCとの通信

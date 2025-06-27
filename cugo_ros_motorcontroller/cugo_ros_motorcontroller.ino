@@ -8,9 +8,10 @@ uint8_t packetBinaryBufferSerial[SERIAL_HEADER_SIZE + SERIAL_BIN_BUFF_SIZE];
 PacketSerial packetSerial;
 
 // 受信バッファ
-#define RECV_HEADER_CHECKSUM_PTR 6  // ヘッダ チェックサム
-#define TARGET_RPM_L_PTR 0          // 左モータ目標RPM
-#define TARGET_RPM_R_PTR 4          // 右モータ目標RPM
+#define RECV_HEADER_PRODUCT_ID_PTR 0  // ヘッダ プロダクトID
+#define RECV_HEADER_CHECKSUM_PTR 6    // ヘッダ チェックサム
+#define TARGET_RPM_L_PTR 0            // 左モータ目標RPM
+#define TARGET_RPM_R_PTR 4            // 右モータ目標RPM
 
 // 送信バッファ
 #define SEND_ENCODER_L_PTR 0  // 左エンコーダ回転数
@@ -95,18 +96,18 @@ uint16_t read_uint16_t_from_header(uint8_t* buf, const int TARGET) {
   return val;
 }
 
-void set_motor_cmd_binary(uint8_t* reciev_buf, int size) {
+void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
   if (size > 0) {
     MotorRPM reciev_rpm, clamped_rpm;
     reciev_rpm.left = read_float_from_buf(reciev_buf, TARGET_RPM_L_PTR);
     reciev_rpm.right = read_float_from_buf(reciev_buf, TARGET_RPM_R_PTR);
 
     // 物理的最高速以上のときは、モータの最高速に丸める
-    bool test_new_clanp_logic = true;  // 複雑な丸めアルゴリズムを有効化。運用して問題がなければこちらを本流にする。
-    if (test_new_clanp_logic) {         // 回転成分を優先して残し、直進方向を減らす方法で速度上限以上の速度を丸める。曲がりきれず激突することを防止する。
-      clamped_rpm = clamp_rpm_rotation_priority(reciev_rpm, CUGO_MAX_MOTOR_RPM);
+    bool test_new_clanp_logic = false;  // 複雑な丸めアルゴリズムを有効化。運用して問題がなければこちらを本流にする。
+    if (test_new_clanp_logic) {        // 回転成分を優先して残し、直進方向を減らす方法で速度上限以上の速度を丸める。曲がりきれず激突することを防止する。
+      clamped_rpm = clamp_rpm_rotation_priority(reciev_rpm, max_rpm);
     } else {
-      clamped_rpm = clamp_rpm_simple(reciev_rpm, CUGO_MAX_MOTOR_RPM);
+      clamped_rpm = clamp_rpm_simple(reciev_rpm, max_rpm);
     }
     cugo_rpm_direct_instructions(clamped_rpm.left, clamped_rpm.right);
     /*  モータに指令値を無事セットできたら、通信失敗カウンタをリセット
@@ -122,11 +123,11 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size) {
 MotorRPM clamp_rpm_simple(MotorRPM target_rpm, float max_rpm) {
   MotorRPM new_rpm = target_rpm;
   if (abs(target_rpm.left) >= max_rpm) {
-    new_rpm.left = target_rpm.left / abs(target_rpm.left) * CUGO_MAX_MOTOR_RPM;
+    new_rpm.left = target_rpm.left / abs(target_rpm.left) * max_rpm;
   }
   // 右モータ速度を監視。上限を超えてたら上限速度に丸める。
-  if (abs(target_rpm.right) >= CUGO_MAX_MOTOR_RPM) {
-    new_rpm.right = target_rpm.right / abs(target_rpm.right) * CUGO_MAX_MOTOR_RPM;
+  if (abs(target_rpm.right) >= max_rpm) {
+    new_rpm.right = target_rpm.right / abs(target_rpm.right) * max_rpm;
   }
   return new_rpm;
 }
@@ -190,10 +191,22 @@ void create_serial_packet(uint8_t* packet, uint16_t* header, uint8_t* body) {
   memmove(packet + offset, body, sizeof(uint8_t) * SERIAL_BIN_BUFF_SIZE);
 }
 
+float check_max_rpm(int product_id){
+  if(product_id == 0){
+    return CUGOV4_MAX_MOTOR_RPM;
+  } else if(product_id == 1){
+    return CUGOV3i_MAX_MOTOR_RPM;
+  } else {
+    return CUGOV4_MAX_MOTOR_RPM;
+  }
+}
+
 void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
   uint8_t tempBuffer[size];
   memcpy(tempBuffer, buffer, size);
   // バッファにたまったデータを抜き出して制御に適用
+  uint16_t product_id = read_uint16_t_from_header(tempBuffer, RECV_HEADER_PRODUCT_ID_PTR);
+  float max_rpm = check_max_rpm(product_id);
   // チェックサムの確認
   uint16_t recv_checksum = read_uint16_t_from_header(tempBuffer, RECV_HEADER_CHECKSUM_PTR);
   // ボディ部分へのポインタを取得
@@ -204,7 +217,7 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
   if (recv_checksum != calc_checksum) {
     //Serial.println("Packet integrity check failed");
   } else {
-    set_motor_cmd_binary(tempBuffer, size);
+    set_motor_cmd_binary(tempBuffer, size, max_rpm);
   }
 
   // 送信ボディの作成
