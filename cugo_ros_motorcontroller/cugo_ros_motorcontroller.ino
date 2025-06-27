@@ -95,11 +95,6 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size) {
     float sp_reciev_float[2];
     sp_reciev_float[0] = read_float_from_buf(reciev_buf, TARGET_RPM_L_PTR);
     sp_reciev_float[1] = read_float_from_buf(reciev_buf, TARGET_RPM_R_PTR);
-    //split(reciev_str, ',', sp_reciev_str);
-    //Serial.print("L/R rpm: ");
-    //Serial.print(sp_reciev_float[0]);
-    //Serial.print(", ");
-    //Serial.println(sp_reciev_float[1]);
 
     // 物理的最高速以上のときは、モータの最高速に丸める
     // この丸め処理のせいで回転ベクトルが甘くなることがある。
