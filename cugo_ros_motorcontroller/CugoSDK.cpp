@@ -4,33 +4,16 @@
 
 RPI_PICO_Timer ITimer0(0);
 
-// グローバル変数宣言
+// モード指定
 int cugo_old_runmode = CUGO_CMD_MODE;
 int cugo_runmode = CUGO_CMD_MODE;
 bool cugo_switching_reset = true;
-long int cugo_count_prev_L = 0;
-long int cugo_count_prev_R = 0;
 
 //カウント関連
-long int cugo_target_count_L = 0;
-long int cugo_target_count_R = 0;
-long int cugo_start_count_L = 0;
-long int cugo_start_count_R = 0;
 long int cugo_current_count_L = 0;
 long int cugo_current_count_R = 0;
-volatile long cugo_current_encoder_R = 0;
-volatile long cugo_current_encoder_L = 0;
 long int cugo_prev_encoder_L = 0;
 long int cugo_prev_encoder_R = 0;
-
-unsigned long long int cugo_calc_odometer_time = 0;
-float cugo_odometer_theta = 0;
-float cugo_odometer_x = 0;
-float cugo_odometer_y = 0;
-float cugo_odometer_degree = 0;
-long int cugo_odometer_count_theta = 0;
-bool cugo_direction_L = true;
-bool cugo_direction_R = true;
 
 //ld2関連
 volatile long cugo_ld2_id = 0;
@@ -38,7 +21,6 @@ volatile long cugo_ld2_feedback_hz = 0;
 volatile long cugo_ld2_feedback_dutation = 0;
 const long int cugo_ld2_index_tofreq[3] = { 10, 50, 100 };
 
-//各種関数
 //初期化関数
 void cugo_init() {
 
@@ -68,8 +50,6 @@ void cugo_rpm_direct_instructions(float left, float right) {
   ld2_write_cmd(frame);
 }
 
-
-
 //------------------------------------便利関数
 void ld2_float_to_frame(float data, long int start, unsigned char* index) {  //配列indexの4番目からfloat dataを書き込む場合-> FloatToInt(data, 4, index);
   memcpy(&index[start], &data, 4);
@@ -87,15 +67,10 @@ void ld2_write_cmd(unsigned char cmd[10]) {  //引数はidとチェックサム�
   unsigned char checksum = cugo_ld2_id;
   for (i = 0; i < 10; i++) {
     Serial1.write(cmd[i]);
-    //Serial.print(cmd[i],HEX);
-    //Serial.print(",");
     checksum += (unsigned char)(cmd[i]);
   }
   Serial1.write(cugo_ld2_id);
-  //Serial.print(id,HEX);
-  //Serial.print(",");
   Serial1.write(checksum);
-  //Serial.println(checksum,HEX);
   cugo_ld2_id++;
   if (cugo_ld2_id > 0xFF) cugo_ld2_id = 0;
 }
@@ -106,18 +81,12 @@ void ld2_get_cmd() {  //引数はidとチェックサム以外の配列
     while (Serial1.read() != 0xFF) {
     }
     frame[0] = 0xFF;
-    //Serial.print(String(frame[0]));
-    //Serial.print(",");
     for (long int i = 1; i < 12; i++) {
       frame[i] = Serial1.read();
-      //  Serial.print(String(frame[i]));
-      //  Serial.print(",");
     }
-    //  Serial.println("");
     /*
     if(frame[1] == 0x8E){  //5.5.6 Encoder Feedback
       ld2_set_encorder(frame);
-
     }*/
 
     if (frame[1] == 0x80) {  //5.5.1 Control Mode Feedback
@@ -156,7 +125,6 @@ void ld2_get_cmd() {  //引数はidとチェックサム以外の配列
     } else if (frame[1] == 0x84) {  //5.5.3 Current RPM Feedback
       //ld2_frame_to_float(frame,2,&rpm_current_L);
       //ld2_frame_to_float(frame,4,&rpm_current_R);
-
     } else if (frame[1] == 0x86) {  //5.5.4 Average RPM Feedback
 
     } else if (frame[1] == 0x8D) {  //5.5.5 SBUS Signal Feedback
@@ -195,20 +163,6 @@ void ld2_set_encorder(unsigned char frame[12]) {
   cugo_current_count_R += diff_R;
   cugo_prev_encoder_L = encoderL;
   cugo_prev_encoder_R = encoderR;
-}
-
-void ld2_encoder_reset() {
-  unsigned char frame[10] = { 0xFF, 0x0E, 0x01, 0x01, 0, 0, 0, 0, 0, 0 };
-  ld2_write_cmd(frame);
-  cugo_current_encoder_L = 0;
-  cugo_prev_encoder_L = 0;
-  cugo_start_count_L = 0;
-  cugo_current_count_L = 0;
-
-  cugo_current_encoder_R = 0;
-  cugo_prev_encoder_R = 0;
-  cugo_start_count_R = 0;
-  cugo_current_count_R = 0;
 }
 
 void ld2_set_feedback(unsigned char freq_index, unsigned char kindof_data) {  //freq 0:10[hz] 1:50[hz] 2:100[hz] kindof_data 1:Mode 2:CMD_RPM 4:CurrentRPM 8:AveCurrentRPM 128:EncorderData

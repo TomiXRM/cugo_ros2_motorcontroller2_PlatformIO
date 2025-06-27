@@ -191,19 +191,6 @@ void create_serial_packet(uint8_t* packet, uint16_t* header, uint8_t* body) {
 }
 
 void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
-  //Serial.print("Packet Received! Size: ");
-  //Serial.println(size);
-  //Serial.print("Content (HEX):");
-  /*
-  for (size_t i = 0; i < size; ++i) {
-    Serial.print(" ");
-    if (buffer[i] < 0x10) Serial.print("0");  // 見やすくするため0を補完
-    Serial.print(buffer[i], HEX);
-  }
-  */
-  //Serial.println();
-  //Serial.println("onSerialPacketReceived");
-
   uint8_t tempBuffer[size];
   memcpy(tempBuffer, buffer, size);
   // バッファにたまったデータを抜き出して制御に適用
@@ -213,15 +200,7 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
   const uint8_t* body_ptr = tempBuffer + SERIAL_HEADER_SIZE;
   // ボディ部分(64バイト)だけを渡してチェックサムを計算
   uint16_t calc_checksum = calculate_checksum(body_ptr, SERIAL_BIN_BUFF_SIZE);
-  //uint16_t calc_checksum = calculate_checksum(tempBuffer, SERIAL_HEADER_SIZE + SERIAL_BIN_BUFF_SIZE, SERIAL_HEADER_SIZE);
-  //uint16_t calc_checksum = calculate_checksum(tempBuffer, SERIAL_HEADER_SIZE + 8, SERIAL_HEADER_SIZE);
 
-  /*
-  Serial.print("recv_checksum: ");
-  Serial.println(recv_checksum);
-  Serial.print("calc_checksum ");
-  Serial.println(calc_checksum);
-  */
   if (recv_checksum != calc_checksum) {
     //Serial.println("Packet integrity check failed");
   } else {
@@ -232,12 +211,6 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
   uint8_t send_body[SERIAL_BIN_BUFF_SIZE];
   // 送信ボディの初期化
   memset(send_body, 0, sizeof(send_body));
-  /*
-  Serial.print("send count: ");
-  Serial.print(cugo_current_count_L);
-  Serial.print(", ");
-  Serial.println(cugo_current_count_R);
-  */
 
   // ボディへ送信データの書き込み
   write_int_to_buf(send_body, SEND_ENCODER_L_PTR, cugo_current_count_L);
@@ -253,7 +226,6 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
   // 送信パケットの作成
   uint8_t send_packet[send_len];
   create_serial_packet(send_packet, send_header, send_body);
-
   packetSerial.send(send_packet, send_len);
 }
 
@@ -297,20 +269,4 @@ void loop() {
   if (packetSerial.overflow()) {
     //Serial.print("serial packet overflow!!");
   }
-
-
-  /*
-    // ★★★ デバッグ用コードを追加 ★★★
-  // PCから送られてくる生のバイト列を1バイトずつ16進数で確認する
-  if (Serial.available() > 0) {
-    uint8_t received_byte = Serial.read();
-
-    // Arduino IDEのシリアルモニタに16進数で表示
-    if (received_byte < 0x10) {
-      Serial.print("0"); // 1桁の16進数を見やすくするため
-    }
-    Serial.print(received_byte, HEX);
-    Serial.print(" "); 
-  }
-  */
 }
