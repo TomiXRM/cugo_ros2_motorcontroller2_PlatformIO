@@ -21,6 +21,12 @@ unsigned long long current_time = 0, prev_time_10ms = 0, prev_time_100ms, prev_t
 // FAIL SAFE COUNT
 int COM_FAIL_COUNT = 0;
 
+// モーターのRPM値を格納するための構造体
+struct MotorRPM {
+  float left;
+  float right;
+};
+
 void stop_motor_immediately() {
   cugo_rpm_direct_instructions(0, 0);
 }
@@ -90,19 +96,19 @@ uint16_t read_uint16_t_from_header(uint8_t* buf, const int TARGET) {
 }
 
 void set_motor_cmd_binary(uint8_t* reciev_buf, int size) {
-  //Serial.println("set_motor_cmd_binary");
   if (size > 0) {
-    float sp_reciev_float[2];
-    sp_reciev_float[0] = read_float_from_buf(reciev_buf, TARGET_RPM_L_PTR);
-    sp_reciev_float[1] = read_float_from_buf(reciev_buf, TARGET_RPM_R_PTR);
+    MotorRPM reciev_rpm, clamped_rpm;
+    reciev_rpm.left = read_float_from_buf(reciev_buf, TARGET_RPM_L_PTR);
+    reciev_rpm.right = read_float_from_buf(reciev_buf, TARGET_RPM_R_PTR);
 
     // 物理的最高速以上のときは、モータの最高速に丸める
-    // この丸め処理のせいで回転ベクトルが甘くなることがある。
-    int rpm_l = sp_reciev_float[0];
-    if (abs(rpm_l) >= CUGO_NORMAL_MOTOR_RPM) rpm_l = rpm_l / abs(rpm_l) * CUGO_NORMAL_MOTOR_RPM;
-    int rpm_r = sp_reciev_float[1];
-    if (abs(rpm_r) >= CUGO_NORMAL_MOTOR_RPM) rpm_r = rpm_r / abs(rpm_r) * CUGO_NORMAL_MOTOR_RPM;
-    cugo_rpm_direct_instructions(rpm_l, rpm_r);
+    bool test_new_clanp_logic = true;  // 複雑な丸めアルゴリズムを有効化。運用して問題がなければこちらを本流にする。
+    if (test_new_clanp_logic) {         // 回転成分を優先して残し、直進方向を減らす方法で速度上限以上の速度を丸める。曲がりきれず激突することを防止する。
+      clamped_rpm = clamp_rpm_rotation_priority(reciev_rpm, CUGO_MAX_MOTOR_RPM);
+    } else {
+      clamped_rpm = clamp_rpm_simple(reciev_rpm, CUGO_MAX_MOTOR_RPM);
+    }
+    cugo_rpm_direct_instructions(clamped_rpm.left, clamped_rpm.right);
     /*  モータに指令値を無事セットできたら、通信失敗カウンタをリセット
         毎回リセットすることで通常通信できる。
         10Hzで通信しているので、100msJOBでカウンタアップ。
@@ -111,6 +117,50 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size) {
   } else {
     cugo_rpm_direct_instructions(0.0, 0.0);
   }
+}
+
+MotorRPM clamp_rpm_simple(MotorRPM target_rpm, float max_rpm) {
+  MotorRPM new_rpm = target_rpm;
+  if (abs(target_rpm.left) >= max_rpm) {
+    new_rpm.left = target_rpm.left / abs(target_rpm.left) * CUGO_MAX_MOTOR_RPM;
+  }
+  // 右モータ速度を監視。上限を超えてたら上限速度に丸める。
+  if (abs(target_rpm.right) >= CUGO_MAX_MOTOR_RPM) {
+    new_rpm.right = target_rpm.right / abs(target_rpm.right) * CUGO_MAX_MOTOR_RPM;
+  }
+  return new_rpm;
+}
+
+MotorRPM clamp_rpm_rotation_priority(MotorRPM target_rpm, float max_rpm) {
+  // L/Rモータ速度を監視して、上限速度を超えると上限速度にクランプするコードを使用していた
+  // すると、直進しながら急旋回する動きで、ロボットを回転させる速度がクランプロジックで消えてしまうことがあった
+  // これにより、回避指示をしているのに障害物に激突することがあった
+  // ここでは、L/Rのrpmを直進成分と回転成分を抜き出し、直進だけ減速させ回転成分を殺さないように速度上限クランプを行う処理をおこなう。
+
+  // --- ステップ1: 目標RPMを並進速度(v_trans)と角速度(v_rot)に分解 ---
+  float v_trans = (target_rpm.right + target_rpm.left) / 2.0f;
+  float v_rot = (target_rpm.right - target_rpm.left) / 2.0f;
+
+  // --- ステップ2: 角速度(v_rot)自体の上限処理 ---
+  // そもそも角速度が速すぎると、並進速度を0にしても片輪が上限を超えてしまう。（並進、回転両方上限以上のとき）
+  // そのため、最初にv_rotを[-max_rpm, max_rpm]の範囲に丸める。
+  float clamped_v_rot = max(-max_rpm, min(max_rpm, v_rot));
+
+  // --- ステップ3: 回転(clamped_v_rot)を維持するために、並進(v_trans)の上限を計算 ---
+  // ここでは、上限処理済みの `clamped_v_rot` を使用する。
+  float v_trans_limit = max_rpm - std::abs(clamped_v_rot);
+
+  // --- ステップ4: 並進速度(v_trans)を上限値(v_trans_limit)に丸める ---
+  // v_trans_limitは常に0以上になるため、よりシンプルなclamp処理が可能。
+  float clamped_v_trans = max(-v_trans_limit, min(v_trans_limit, v_trans));
+
+  // --- ステップ5: 丸めたv_transとv_rotから、最終的なRPMを再計算 ---
+  // ここでも、上限処理済みの `clamped_v_rot` を使用する。
+  MotorRPM new_rpm;
+  new_rpm.left = clamped_v_trans - clamped_v_rot;
+  new_rpm.right = clamped_v_trans + clamped_v_rot;
+
+  return new_rpm;
 }
 
 uint16_t calculate_checksum(const void* data, size_t size, size_t start = 0) {
@@ -166,7 +216,7 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
   //uint16_t calc_checksum = calculate_checksum(tempBuffer, SERIAL_HEADER_SIZE + SERIAL_BIN_BUFF_SIZE, SERIAL_HEADER_SIZE);
   //uint16_t calc_checksum = calculate_checksum(tempBuffer, SERIAL_HEADER_SIZE + 8, SERIAL_HEADER_SIZE);
 
-/*
+  /*
   Serial.print("recv_checksum: ");
   Serial.println(recv_checksum);
   Serial.print("calc_checksum ");
@@ -249,7 +299,7 @@ void loop() {
   }
 
 
-/*
+  /*
     // ★★★ デバッグ用コードを追加 ★★★
   // PCから送られてくる生のバイト列を1バイトずつ16進数で確認する
   if (Serial.available() > 0) {
