@@ -103,8 +103,8 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
     reciev_rpm.right = read_float_from_buf(reciev_buf, TARGET_RPM_R_PTR);
 
     // 物理的最高速以上のときは、モータの最高速に丸める
-    bool test_new_clanp_logic = false;  // 複雑な丸めアルゴリズムを有効化。運用して問題がなければこちらを本流にする。
-    if (test_new_clanp_logic) {        // 回転成分を優先して残し、直進方向を減らす方法で速度上限以上の速度を丸める。曲がりきれず激突することを防止する。
+    bool rotation_clanp_logic = true;  // 回転成分を優先した丸めアルゴリズムを有効化。falseにすると上限rpmだけに注目したシンプルなロジックに切り替わる。
+    if (rotation_clanp_logic) {        // 回転成分を優先して残し、直進方向を減らす方法で速度上限以上の速度を丸める。曲がりきれず激突することを防止する。
       clamped_rpm = clamp_rpm_rotation_priority(reciev_rpm, max_rpm);
     } else {
       clamped_rpm = clamp_rpm_simple(reciev_rpm, max_rpm);
