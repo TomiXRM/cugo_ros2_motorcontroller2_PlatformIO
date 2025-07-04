@@ -30,7 +30,7 @@ void cugo_init() {
   ld2_set_feedback(2, 0b10000001);  //freq{0:10[hz] 1:50[hz] 2:100[hz]} kindof_data{0b1:Mode 0b10:CMD_RPM 0b100:CurrentRPM 0b1000:AveCurrentRPM 0b10000000:EncorderData}
   delay(1000);
   if (!(ITimer0.attachInterruptInterval(cugo_ld2_feedback_dutation * 1000, cugo_timer_handler0))) {
-    Serial.println(F("Can't set ITimer0. Select another freq. or timer"));
+    //Serial.println(F("Can't set ITimer0. Select another freq. or timer"));
   }
   delay(1000);
   ld2_set_control_mode(CUGO_CMD_MODE);
@@ -102,7 +102,7 @@ void ld2_get_cmd() {  //引数はidとチェックサム以外の配列
           if (cugo_old_runmode == CUGO_CMD_MODE) {
             cugo_runmode = CUGO_RC_MODE;
             cugo_old_runmode = CUGO_RC_MODE;
-            Serial.println(F("###   MODE:CUGO_RC_MODE     ###"));
+            //Serial.println(F("###   MODE:CUGO_RC_MODE     ###"));
 
           } else if (cugo_old_runmode == CUGO_RC_MODE) {
             cugo_runmode = CUGO_RC_MODE;
@@ -113,7 +113,7 @@ void ld2_get_cmd() {  //引数はidとチェックサム以外の配列
         if (cugo_old_runmode == CUGO_RC_MODE) {
           cugo_runmode = CUGO_CMD_MODE;
           cugo_old_runmode = CUGO_CMD_MODE;
-          Serial.println(F("###   MODE:CUGO_CMD_MODE    ###"));
+          //Serial.println(F("###   MODE:CUGO_CMD_MODE    ###"));
         } else if (cugo_old_runmode == CUGO_CMD_MODE) {
           cugo_runmode = CUGO_CMD_MODE;
         } else {
