@@ -1,20 +1,18 @@
 ![image](https://github.com/CuboRex-Development/cugo_ros_control/assets/97714660/a2525198-fa61-4c4d-9a0f-7dd6824fa625)
 
 # cugo_ros2_motorcontroller2
-ROS 2でクローラロボット開発プラットフォームを制御するRaspberryPiPicoのスケッチです。
+ROS 2でクローラロボット開発プラットフォームを制御するArduinoスケッチです。
 
 セットでROS 2パッケージの[cugo_ros2_control2](https://github.com/CuboRex-Development/cugo_ros2_control2)と使用します。
 
-
-
-
-### このArduinoスケッチはクローラロボット開発プラットフォーム V4 / V3i 専用です。
-ROS開発キットをご利用の方は[こちら](https://github.com/CuboRex-Development/cugo_ros_motorcontroller/tree/uno-udp)を参照してください。
-
+> [!WARNING]
+> このArduinoスケッチはクローラロボット開発プラットフォーム CuGo V4 / V3i 専用です。
+> 
+> ROS開発キット CuGo V3 をご利用の方は[こちら](https://github.com/CuboRex-Development/cugo_ros_motorcontroller/tree/uno-udp)を参照してください。
     
 
 # Features
-cugo_ros2_motorcontroller2では、ROS 2パッケージの [cugo_ros2_control2](https://github.com/CuboRex-Development/cugo_ros2_control2)から受信した目標回転数になるようにモータ制御し、モータから取得した実際の回転数をROS 2に返信します。
+cugo_ros2_motorcontroller2では、ROS 2パッケージの [cugo_ros2_control2](https://github.com/CuboRex-Development/cugo_ros2_control2)から受信した目標回転数になるようにモータ制御し、エンコーダから取得したカウント数をPCに返信します。
 
 また、付属のプロポ（MR-8）を用いて、コントローラ操作と自律走行の切り替えができます。左スティックを左に倒すことでコントローラ操作を受け付けるRC-MODEに、右に倒すことでROSの速度ベクトル受け付けるROS-MODEに切り替えることができます。
 
@@ -51,7 +49,7 @@ Arduino標準ライブラリ
 
 クローラロボット開発プラットフォームのRaspberryPiPicoとPCをUSBケーブルで接続してください。
 
-スケッチがRaspberryPiPicoに書き込まれていれば、ROS 2パッケージ[cugo_ros2_control2](https://github.com/CuboRex-Development/cugo_ros2_control2)を起動すると、自動的にROS 2と通信します。
+スケッチがRaspberryPiPicoに書き込まれていれば、ROS 2パッケージ[cugo_ros2_control2](https://github.com/CuboRex-Development/cugo_ros2_control2)を起動すると、自動的にPCと通信します。
 
 もし、うまく `/cmd_vel` 通りに走行を開始しない場合は、一度USBケーブルを抜き、 ロボットの電源を入れなおしてから再度PCとRaspberryPiPicoをUSBケーブルで接続してください。
 
