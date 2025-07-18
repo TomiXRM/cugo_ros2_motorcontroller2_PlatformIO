@@ -9,14 +9,23 @@ ROS 2でクローラロボット開発プラットフォームを制御するArd
 > このArduinoスケッチはクローラロボット開発プラットフォーム CuGo V4 / V3i 専用です。
 > 
 > ROS開発キット CuGo V3 をご利用の方は[こちら](https://github.com/CuboRex-Development/cugo_ros_motorcontroller/tree/uno-udp)を参照してください。
-    
+
+
+# Table of Contents
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Note](#note)
+- [License](#license)    
+
 
 # Features
 cugo_ros2_motorcontroller2では、ROS 2パッケージの [cugo_ros2_control2](https://github.com/CuboRex-Development/cugo_ros2_control2)から受信した目標回転数になるようにモータ制御し、エンコーダから取得したカウント数をPCに返信します。
 
-また、付属のプロポ（MR-8）を用いて、コントローラ操作と自律走行の切り替えができます。左スティックを左に倒すことでコントローラ操作を受け付けるRC-MODEに、右に倒すことでROSの速度ベクトル受け付けるROS-MODEに切り替えることができます。
+また、付属のプロポ（MR-8）を用いて、コントローラ操作と自律走行の切り替えができます。左スティックを左に倒すことでコントローラ操作を受け付けるRC-MODEに、右に倒すことでROSの速度ベクトルを受け付けるROS-MODEに切り替えることができます。
 
-自律走行中に誤った判断をして障害物に衝突しそうなシーンでは、プロポよりRC-MODEに変更することで、コントローラ操作に即時に切り替わりロボットを止めることができます。  
+自律走行中に誤った判断をして障害物に衝突しそうなシーンでは、プロポによりRC-MODEに変更することで、コントローラ操作に即時に切り替わりロボットを止めることができます。  
 
 
 ![image](https://user-images.githubusercontent.com/22425319/234765585-23458585-ea44-40d5-b71f-395c93509fc8.png)
@@ -28,9 +37,9 @@ cugo_ros2_motorcontroller2では、ROS 2パッケージの [cugo_ros2_control2](
 でお使いいただけます。
 
 
-# Requirement
+# Requirements
 ハードウェア
-* RaspberryPiPico
+* RaspberryPiPico（クローラロボット開発プラットフォームに同梱）
 
 Arduino標準ライブラリ 
 * Servo.h
@@ -39,9 +48,15 @@ Arduino標準ライブラリ
 * hardware/watchdog.h
  
 # Installation
- Arduino標準IDEでcugo_ros2_motorcontroller2.inoを開き、クローラロボット開発プラットフォームのRaspberryPiPicoに書き込んでください。
+ Arduino IDEでcugo_ros2_motorcontroller2.inoを開き、スケッチを書き込んでください。
 
  ArduinoIDEのインストール方法や書き込み方法などの基本的な操作方法はこちらの[2.準備](https://github.com/CuboRex-Development/cugo-beginner-programming/tree/pico)をご覧ください。
+
+
+> [!IMPORTANT]
+> 出荷直後は安全のため、DIP-SWによってRC-MODEのみに制限されています。
+>
+> こちらの[準備2-6](https://github.com/CuboRex-Development/cugo-beginner-programming/tree/pico?tab=readme-ov-file#2-6-ld-2%E3%81%AE%E3%82%B3%E3%83%9E%E3%83%B3%E3%83%89%E3%83%A2%E3%83%BC%E3%83%89%E3%82%92%E6%9C%89%E5%8A%B9%E5%8C%96)の操作を行い、ROS-MODEを有効化してください。
 
 
  
