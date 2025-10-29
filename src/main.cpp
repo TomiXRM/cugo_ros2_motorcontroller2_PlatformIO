@@ -28,6 +28,11 @@ struct MotorRPM {
   float right;
 };
 
+// 関数プロトタイプ宣言
+MotorRPM clamp_rpm_simple(MotorRPM target_rpm, float max_rpm);
+MotorRPM clamp_rpm_rotation_priority(MotorRPM target_rpm, float max_rpm);
+float check_max_rpm(int product_id);
+
 void stop_motor_immediately() {
   cugo_rpm_direct_instructions(0, 0);
 }
