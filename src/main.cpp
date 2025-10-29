@@ -32,7 +32,7 @@ int COM_FAIL_COUNT = 0;
 void stop_motor_immediately() {
   if (motorController) {
     motorController->stopMotor();
-    DEBUG_PRINTLN("Motor stopped");
+    Log.warningln("Motor stopped (failsafe triggered)");
   }
 }
 
@@ -84,13 +84,13 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
     }
 
     motorController->setRPM(clamped_rpm.left, clamped_rpm.right);
-    DEBUG_PRINTF("RPM set: L=%.2f R=%.2f\n", clamped_rpm.left,
-                 clamped_rpm.right);
+    Log.trace("RPM set: L=%.2f R=%.2f\n", clamped_rpm.left, clamped_rpm.right);
 
     // モータに指令値を無事セットできたら、通信失敗カウンタをリセット
     COM_FAIL_COUNT = 0;
   } else {
     if (motorController) { motorController->stopMotor(); }
+    Log.errorln("Motor command not set: invalid size or motorController is null");
   }
 }
 
@@ -116,9 +116,10 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
 
   if (recv_checksum != calc_checksum) {
     // パケット整合性チェック失敗
-    DEBUG_PRINTLN("Checksum mismatch");
+    Log.errorln("Checksum mismatch (recv: 0x%04X, calc: 0x%04X)", recv_checksum, calc_checksum);
   } else {
     set_motor_cmd_binary(tempBuffer, size, max_rpm);
+    Log.traceln("Motor command processed");
   }
 
   // 送信ボディの作成
@@ -160,14 +161,14 @@ void setup() {
 
   // デバッグシリアル初期化
   debugInit();
-  DEBUG_PRINTLN("=== Cugo Motor Controller Started ===");
+  Log.noticeln("=== Cugo Motor Controller Started ===");
 
 #ifdef USE_CUGO_SDK
-  DEBUG_PRINTLN("Using CugoSDK");
+  Log.infoln("Using CugoSDK");
   // CugoSDKを使用
   motorController = new CugoMotorController(0);  // 0: V4, 1: V3i
 #else
-  DEBUG_PRINTLN("Using Generic Motor Controller");
+  Log.infoln("Using Generic Motor Controller");
   // 一般的なDCモータ+エンコーダを使用
   // ピン番号は実際のハードウェアに合わせて変更してください
   // motorController = new GenericMotorController(
@@ -185,20 +186,20 @@ void setup() {
 
   if (motorController) {
     motorController->init();
-    DEBUG_PRINTLN("Motor controller initialized");
+    Log.infoln("Motor controller initialized");
   }
 
   // PacketSerial初期化
   packetSerial.begin(115200);
   packetSerial.setStream(&Serial);
   packetSerial.setPacketHandler(&onSerialPacketReceived);
-  DEBUG_PRINTLN("PacketSerial initialized");
+  Log.infoln("PacketSerial initialized");
 
   // Serialバッファをカラにしてから実行を開始する
   delay(100);
   while (Serial.available() > 0) { Serial.read(); }
 
-  DEBUG_PRINTLN("Setup completed");
+  Log.noticeln("Setup completed");
 }
 
 void loop() {
@@ -223,5 +224,5 @@ void loop() {
   packetSerial.update();
 
   // 受信バッファのオーバーフローチェック
-  if (packetSerial.overflow()) { DEBUG_PRINTLN("PacketSerial overflow!"); }
+  if (packetSerial.overflow()) { Log.errorln("PacketSerial overflow!"); }
 }

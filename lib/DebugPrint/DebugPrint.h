@@ -2,12 +2,12 @@
 #define DEBUG_PRINT_H
 
 #include <Arduino.h>
+#include <ArduinoLog.h>
 
 // デバッグ出力の有効/無効を切り替え
 #define DEBUG_ENABLED 1
 
 // デバッグ用シリアルポート設定
-
 // Serial1 ← HW UART 0
 // Serial2 ← HW UART 1
 
@@ -15,10 +15,10 @@
 #define DEBUG_SERIAL Serial2
 #define DEBUG_BAUD 115200
 
-// デバッグ出力マクロ
-#define DEBUG_PRINT(x) DEBUG_SERIAL.print(x)
-#define DEBUG_PRINTLN(x) DEBUG_SERIAL.println(x)
-#define DEBUG_PRINTF(fmt, ...) DEBUG_SERIAL.printf(fmt, ##__VA_ARGS__)
+// Arduino Logラッパーマクロ
+#define DEBUG_PRINT(x) Log.notice(x)
+#define DEBUG_PRINTLN(x) Log.noticeln(x)
+#define DEBUG_PRINTF(fmt, ...) Log.notice(fmt, ##__VA_ARGS__)
 
 // 初期化関数
 inline void debugInit() {
@@ -26,6 +26,13 @@ inline void debugInit() {
   DEBUG_SERIAL.setRX(21);
   DEBUG_SERIAL.begin(DEBUG_BAUD);
   delay(100);
+
+  // Arduino Log初期化
+  Log.begin(LOG_LEVEL_VERBOSE, &DEBUG_SERIAL);
+  Log.setPrefix([](Print* _logOutput, int logLevel) {
+    const char* levelStr[] = {"SILENT", "FATAL", "ERROR", "WARN", "INFO", "TRACE", "VERB"};
+    _logOutput->printf("[%s] ", levelStr[logLevel]);
+  });
 }
 
 #else
