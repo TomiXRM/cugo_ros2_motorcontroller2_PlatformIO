@@ -12,12 +12,18 @@ ROS 2でクローラロボット開発プラットフォームを制御するArd
 
 
 # Table of Contents
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Note](#note)
-- [License](#license)    
+1. [cugo\_ros2\_motorcontroller2](#cugo_ros2_motorcontroller2)
+2. [Table of Contents](#table-of-contents)
+3. [Features](#features)
+   1. [対応製品](#対応製品)
+4. [Requirements](#requirements)
+   1. [ハードウェア](#ハードウェア)
+   2. [Arduino標準ライブラリ](#arduino標準ライブラリ)
+5. [Installation](#installation)
+6. [Usage](#usage)
+7. [Note](#note)
+   1. [Linuxで実行する場合](#linuxで実行する場合)
+8. [License](#license)
 
 
 # Features
@@ -30,7 +36,7 @@ cugo_ros2_motorcontroller2では、ROS 2パッケージの [cugo_ros2_control2](
 
 ![image](https://user-images.githubusercontent.com/22425319/234765585-23458585-ea44-40d5-b71f-395c93509fc8.png)
 
-#### 対応製品
+## 対応製品
 * クローラロボット開発プラットフォーム CuGo V4
 * クローラロボット開発プラットフォーム CuGo V3i
 
@@ -38,10 +44,11 @@ cugo_ros2_motorcontroller2では、ROS 2パッケージの [cugo_ros2_control2](
 
 
 # Requirements
-ハードウェア
+
+## ハードウェア
 * RaspberryPiPico（クローラロボット開発プラットフォームに同梱）
 
-Arduino標準ライブラリ 
+## Arduino標準ライブラリ
 * Servo.h
 * PacketSerial.h
 * RPi_Pico_TimerInterrupt.h
@@ -75,6 +82,20 @@ Arduino標準ライブラリ
 
 
 # Note
+
+## Linuxで実行する場合
+Linuxでは、Raspberry Pi Picoにアクセスするためにudevルールの設定が必要です。
+
+以下のコマンドを実行して、picotoolのudevルールをインストールしてください：
+
+```bash
+sudo ./script/install_picotool_rules.sh
+```
+
+インストール後、デバイスを再接続すると、udevルールが適用されます。
+
+---
+
 ご不明点がございましたら、[お問い合わせフォーム](https://cuborex.com/contact/)にてお問い合わせください。回答いたします。
 
 
