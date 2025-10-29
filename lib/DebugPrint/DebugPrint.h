@@ -22,8 +22,9 @@
 
 // 初期化関数
 inline void debugInit() {
-  DEBUG_SERIAL.begin(DEBUG_BAUD);
   DEBUG_SERIAL.setTX(20);
+  DEBUG_SERIAL.setRX(21);
+  DEBUG_SERIAL.begin(DEBUG_BAUD);
   delay(100);
 }
 

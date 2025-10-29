@@ -10,7 +10,8 @@
 // モーターコントローラーの選択
 // USE_CUGO_SDK: CugoSDKを使用
 // USE_GENERIC_MOTOR: 一般的なDCモータ+エンコーダを使用
-#define USE_CUGO_SDK
+// #define USE_CUGO_SDK
+#define USE_GENERIC_MOTOR
 
 uint8_t packetBinaryBufferSerial[SERIAL_HEADER_SIZE + SERIAL_BIN_BUFF_SIZE];
 PacketSerial packetSerial;
@@ -152,6 +153,11 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
 // ========================================
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(100);
+  digitalWrite(LED_BUILTIN, LOW);
+
   // デバッグシリアル初期化
   debugInit();
   DEBUG_PRINTLN("=== Cugo Motor Controller Started ===");
