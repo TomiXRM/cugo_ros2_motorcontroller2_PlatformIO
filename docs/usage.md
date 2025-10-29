@@ -139,8 +139,8 @@ motorController = new CugoMotorController(0);  // V4の場合
 
 ```cpp
 #else
-  DEBUG_PRINTLN("Using Generic Motor Controller");
-  motorController = new GenericMotorController(
+  Log.infoln("Using Generic Motor Controller");
+  auto* genericMotor = new GenericMotorController(
     2,  // left_pwm_pin - 左モーターPWMピン
     3,  // left_dir_pin - 左モーター方向ピン
     4,  // left_enc_a_pin - 左エンコーダーA相
@@ -149,22 +149,31 @@ motorController = new CugoMotorController(0);  // V4の場合
     7,  // right_dir_pin - 右モーター方向ピン
     8,  // right_enc_a_pin - 右エンコーダーA相
     9,  // right_enc_b_pin - 右エンコーダーB相
-    100.0  // max_rpm - 最大RPM
+    300.0f  // max_rpm - 想定最大RPM
   );
+  GenericMotorController::DriverConfig config{};
+  config.mechanical_ppr = 13.0f;
+  config.gear_ratio = 45.0f;
+  config.control_interval_us = 1000;  // 制御周期(us)
+  config.invert_direction = false;
+  config.pid_kp = 6.0f;
+  config.pid_ki = 4.0f;
+  config.pid_kd = 0.0f;
+  config.pwm_frequency_hz = 100000;   // 100kHz
+  config.max_duty = 1.0f;
+  config.deadband = 0.05f;
+  config.max_rpm = 300.0f;
+  config.feedforward_gain = 1.0f;
+  config.velocity_alpha = 0.3f;
+
+  genericMotor->applyDriverConfigSymmetric(config);
+  motorController = genericMotor;
 #endif
 ```
 
-#### 3. PID制御パラメータの調整
+#### 3. 制御パラメータの調整
 
-`lib/MotorController/GenericMotorController.cpp`のコンストラクタでPIDゲインを調整：
-
-```cpp
-kp_(0.1),  // 比例ゲイン
-ki_(0.0),  // 積分ゲイン
-kd_(0.0)   // 微分ゲイン
-```
-
-※PID制御の実装は`updatePID()`関数に追加してください（現在はスケルトン実装）。
+`GenericMotorController::DriverConfig`を左右それぞれに適用することで、PPR・ギヤ比・制御周期・正逆転に加え、PIDゲインやPWM設定、デッドバンド、ローパス係数なども一括で渡せます。左右同一構成であれば`applyDriverConfigSymmetric()`を使うと記述が簡潔になります。ログを確認しながら`config.pid_k*`や`config.deadband`、`config.velocity_alpha`などの値を調整してください。
 
 ---
 
@@ -221,9 +230,9 @@ kd_(0.0)   // 微分ゲイン
 
 ---
 
-## デバッグ出力の有効化/無効化
+## デバッグログの設定
 
-デバッグ出力は`lib/DebugPrint/DebugPrint.h`で制御します。
+デバッグログはArduinoLogライブラリ経由で出力します。初期化ロジックは`lib/DebugPrint/DebugPrint.h`にまとめられており、`debugInit()`を呼び出すことでSerial2(UART1)へログを流す設定が行われます。
 
 ### 有効化（デフォルト）
 
@@ -231,31 +240,33 @@ kd_(0.0)   // 微分ゲイン
 #define DEBUG_ENABLED 1
 ```
 
+`DEBUG_ENABLED`が`1`のとき、`debugInit()`は`Log.begin(LOG_LEVEL_VERBOSE, &Serial2)`を実行し、ログレベルプレフィックスを設定します。`Log.trace()`から`Log.fatalln()`までの呼び出しが利用可能です。
+
 ### 無効化
 
 ```cpp
 #define DEBUG_ENABLED 0
 ```
 
-無効化すると、すべての`DEBUG_PRINT()`、`DEBUG_PRINTLN()`、`DEBUG_PRINTF()`がコンパイル時に削除され、プログラムサイズが削減されます。
+無効化すると`debugInit()`は空実装となり、`Log.*`呼び出しも出力されません（シリアルに何も送信されません）。ファームウェアサイズ削減や通信負荷を抑えたいときに切り替えてください。
 
-### デバッグ出力の使い方
-
-コード内でデバッグメッセージを追加する場合：
+### ログ出力の例
 
 ```cpp
-#include "DebugPrint.h"
+#include "DebugPrint.h"  // debugInit() と ArduinoLog の初期化を提供
 
 void myFunction() {
-  DEBUG_PRINTLN("Function started");
+  Log.noticeln("Function started");
 
   int value = 42;
-  DEBUG_PRINTF("Value: %d\n", value);
+  Log.notice("Value: %d", value);
 
-  float rpm = 100.5;
-  DEBUG_PRINTF("RPM: %.2f\n", rpm);
+  float rpm = 100.5f;
+  Log.traceln("RPM: %.2f", rpm);
 }
 ```
+
+レベルに応じて`Log.errorln()`, `Log.warningln()`, `Log.infoln()`などを使い分けると、シリアルモニタでのフィルタリングが容易になります。改行を付けたい場合は`xxxln()`系、連結して表示したい場合は`xxx()`系のAPIを使用してください。
 
 ---
 

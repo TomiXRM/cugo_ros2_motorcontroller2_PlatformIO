@@ -95,20 +95,8 @@ classDiagram
     }
 
     class GenericMotorController {
-        -uint8_t left_pwm_pin_
-        -uint8_t left_dir_pin_
-        -uint8_t left_enc_a_pin_
-        -uint8_t left_enc_b_pin_
-        -uint8_t right_pwm_pin_
-        -uint8_t right_dir_pin_
-        -uint8_t right_enc_a_pin_
-        -uint8_t right_enc_b_pin_
-        -float max_rpm_
-        -float target_left_rpm_
-        -float target_right_rpm_
-        -volatile long encoder_count_left_
-        -volatile long encoder_count_right_
-        -float kp_, ki_, kd_
+        -GenericMotorDriver left_driver_
+        -GenericMotorDriver right_driver_
         +GenericMotorController(pins...)
         +init() void
         +setRPM(left_rpm, right_rpm) void
@@ -117,12 +105,8 @@ classDiagram
         +getEncoderCountRight() long
         +update() void
         +getMaxRPM() float
-        -setPWM(pwm_pin, dir_pin, rpm) void
-        -updatePID() void
-        +encoderISR_LeftA()$ void
-        +encoderISR_LeftB()$ void
-        +encoderISR_RightA()$ void
-        +encoderISR_RightB()$ void
+        +applyDriverConfigs(left_cfg, right_cfg) void
+        +applyDriverConfigSymmetric(cfg) void
     }
 
     class CugoSDK {
@@ -134,12 +118,23 @@ classDiagram
         +cugo_current_count_R long
     }
 
-    class DebugPrint {
-        <<header>>
-        +DEBUG_PRINT(x) macro
-        +DEBUG_PRINTLN(x) macro
-        +DEBUG_PRINTF(fmt, ...) macro
+    class ArduinoLog {
+        <<library>>
+        +Log.notice(message) void
+        +Log.noticeln(message) void
+        +Log.notice(fmt, ...) void
         +debugInit() void
+    }
+
+    class GenericMotorDriver {
+        <<library>>
+        +init() void
+        +setTargetRPM(rpm) void
+        +update() void
+        +stop() void
+        +applyConfig(config) void
+        +setPwmFrequency(freq) void
+        +setMaxRPM(rpm) void
     }
 
     class Main {
@@ -164,7 +159,8 @@ classDiagram
     IMotorController <|.. GenericMotorController : implements
     CugoMotorController --> CugoSDK : uses
     Main --> IMotorController : uses
-    Main --> DebugPrint : uses
+    Main --> ArduinoLog : uses
+    GenericMotorController --> GenericMotorDriver : uses
 ```
 
 ### クラスの役割
@@ -186,7 +182,11 @@ CugoSDKを使用したモーター制御の実装。既存のCugo専用モータ
 
 #### `GenericMotorController`
 
-一般的なDCモーター + インクリメンタルエンコーダーを使用した実装。PWM制御とPIDフィードバック制御のスケルトン実装を含む。
+一般的なDCモーター + インクリメンタルエンコーダーを使用した実装。左右それぞれのホイールを`GenericMotorDriver`インスタンスに委譲し、インターフェイス適合と設定値の受け渡しに専念する。`applyDriverConfigs()`や`applyDriverConfigSymmetric()`で左右の構成値を一括設定できる。
+
+#### `GenericMotorDriver`
+
+汎用DCモータ向けのドライバ。PIOエンコーダを用いた速度計測とPIDベースの制御ループを実装し、左右ホイール双方のPWM・方向制御を担う。`DriverConfig`でPPR・ギヤ比・制御周期・正逆転設定を一括適用できる。
 
 #### `Main` (main.cpp)
 
@@ -220,7 +220,7 @@ sequenceDiagram
         Main->>Main: clamp_rpm_rotation_priority()
         Main->>IMotorController: setRPM(left, right)
         IMotorController->>CugoSDK/HW: control motor
-        Main->>DebugSerial: DEBUG_PRINTF("RPM set")
+        Main->>DebugSerial: Log.trace("RPM set: L=..., R=...")
         Main->>Main: COM_FAIL_COUNT = 0
     else checksum invalid
         Main->>Main: ignore packet
@@ -304,11 +304,12 @@ graph TB
 
         subgraph "Hardware Abstraction"
             CugoSDK[CugoSDK<br/>- LD2 Protocol<br/>- Serial1 (UART0)]
+            GenericDriver[GenericMotorDriver<br/>- PID Control<br/>- PIO Encoders]
             GPIO[GPIO/PWM<br/>- Motor PWM<br/>- Encoder INT]
         end
 
         subgraph "Debug Layer"
-            DebugPrint[DebugPrint<br/>Serial2 (UART1) Debug Output]
+            ArduinoLog[ArduinoLog<br/>Serial2 (UART1) Debug Output]
         end
 
         subgraph "Communication"
@@ -325,22 +326,24 @@ graph TB
 
     MainCpp --> IMotor
     MainCpp --> PacketSerial
-    MainCpp --> DebugPrint
+    MainCpp --> ArduinoLog
 
     IMotor -.-> CugoImpl
     IMotor -.-> GenericImpl
 
     CugoImpl --> CugoSDK
-    GenericImpl --> GPIO
+    GenericImpl --> GenericDriver
+    GenericDriver --> GPIO
 
     PacketSerial <--> ROS2
     CugoSDK <--> LD2
     GPIO <--> DCMotor
-    DebugPrint --> DebugPC
+    ArduinoLog --> DebugPC
 
     style IMotor fill:#ff9,stroke:#333,stroke-width:3px
     style CugoImpl fill:#9f9
     style GenericImpl fill:#9f9
+    style GenericDriver fill:#9ff
 ```
 
 ### レイヤーの説明

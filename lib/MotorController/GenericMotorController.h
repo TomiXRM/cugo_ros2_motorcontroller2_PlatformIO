@@ -2,7 +2,7 @@
 #define GENERIC_MOTOR_CONTROLLER_H
 
 #include "IMotorController.h"
-#include <Arduino.h>
+#include "GenericMotorDriver.h"
 
 /**
  * @brief 一般的なDCモータ+エンコーダを使用したモーター制御実装
@@ -11,7 +11,9 @@
  * 基本的なモーター制御のスケルトン実装
  */
 class GenericMotorController : public IMotorController {
-public:
+ public:
+  using DriverConfig = GenericMotorDriver::DriverConfig;
+
   /**
    * @brief コンストラクタ
    * @param left_pwm_pin 左モーターPWMピン
@@ -24,17 +26,12 @@ public:
    * @param right_enc_b_pin 右エンコーダーBピン
    * @param max_rpm 最大RPM
    */
-  GenericMotorController(
-    uint8_t left_pwm_pin,
-    uint8_t left_dir_pin,
-    uint8_t left_enc_a_pin,
-    uint8_t left_enc_b_pin,
-    uint8_t right_pwm_pin,
-    uint8_t right_dir_pin,
-    uint8_t right_enc_a_pin,
-    uint8_t right_enc_b_pin,
-    float max_rpm = 100.0
-  );
+  GenericMotorController(uint8_t left_pwm_pin, uint8_t left_dir_pin,
+                         uint8_t left_enc_a_pin, uint8_t left_enc_b_pin,
+                         uint8_t right_pwm_pin, uint8_t right_dir_pin,
+                         uint8_t right_enc_a_pin, uint8_t right_enc_b_pin,
+                         float max_rpm = 100.0);
+  ~GenericMotorController() override;
 
   void init() override;
   void setRPM(float left_rpm, float right_rpm) override;
@@ -44,42 +41,20 @@ public:
   void update() override;
   float getMaxRPM() override;
 
-  // エンコーダー割り込みハンドラ（staticメンバー関数）
-  static void encoderISR_LeftA();
-  static void encoderISR_LeftB();
-  static void encoderISR_RightA();
-  static void encoderISR_RightB();
+  // RPM取得
+  float getMeasuredRPMLeft();    // 左モーター生RPM
+  float getMeasuredRPMRight();   // 右モーター生RPM
+  float getFilteredRPMLeft();    // 左モーターフィルタ済みRPM
+  float getFilteredRPMRight();   // 右モーターフィルタ済みRPM
 
-private:
-  // ピン設定
-  uint8_t left_pwm_pin_;
-  uint8_t left_dir_pin_;
-  uint8_t left_enc_a_pin_;
-  uint8_t left_enc_b_pin_;
-  uint8_t right_pwm_pin_;
-  uint8_t right_dir_pin_;
-  uint8_t right_enc_a_pin_;
-  uint8_t right_enc_b_pin_;
+  // ---- 設定API ----
+  void applyDriverConfigs(const DriverConfig& left_config,
+                          const DriverConfig& right_config);
+  void applyDriverConfigSymmetric(const DriverConfig& config);
 
-  // 最大RPM
-  float max_rpm_;
-
-  // 目標RPM
-  float target_left_rpm_;
-  float target_right_rpm_;
-
-  // エンコーダーカウント（volatile: 割り込みで更新）
-  static volatile long encoder_count_left_;
-  static volatile long encoder_count_right_;
-
-  // PID制御用変数（将来実装）
-  float kp_;  // 比例ゲイン
-  float ki_;  // 積分ゲイン
-  float kd_;  // 微分ゲイン
-
-  // 内部ヘルパー関数
-  void setPWM(uint8_t pwm_pin, uint8_t dir_pin, float rpm);
-  void updatePID();  // PID制御（将来実装）
+//  private:
+  GenericMotorDriver left_driver_;
+  GenericMotorDriver right_driver_;
 };
 
-#endif // GENERIC_MOTOR_CONTROLLER_H
+#endif  // GENERIC_MOTOR_CONTROLLER_H

@@ -5,7 +5,7 @@
 #include "CugoMotorController.h"
 #include "PacketHandler.h"
 #include "RpmUtils.h"
-// #include "GenericMotorController.h"  // 一般的なDCモータ使用時にコメント解除
+#include "GenericMotorController.h"
 
 // モーターコントローラーの選択
 // USE_CUGO_SDK: CugoSDKを使用
@@ -19,8 +19,8 @@ PacketSerial packetSerial;
 // モーターコントローラーのインスタンス
 IMotorController* motorController = nullptr;
 
-unsigned long long current_time = 0, prev_time_10ms = 0, prev_time_100ms,
-                   prev_time_1000ms;
+unsigned long long current_time = 0, prev_time_1ms, prev_time_10ms = 0,
+                   prev_time_100ms, prev_time_1000ms;
 
 // FAIL SAFE COUNT
 int COM_FAIL_COUNT = 0;
@@ -47,6 +47,12 @@ void check_failsafe() {
 // 周期タスク
 // ========================================
 
+void job_1ms() {
+#ifdef USE_GENERIC_MOTOR
+  if (motorController) { motorController->update(); }
+#endif
+}
+
 void job_10ms() {
   // nothing
 }
@@ -54,7 +60,9 @@ void job_10ms() {
 void job_100ms() {
   check_failsafe();
   // エンコーダカウントを更新
+#ifdef USE_CUGO_SDK
   if (motorController) { motorController->update(); }
+#endif
 }
 
 void job_1000ms() {
@@ -75,22 +83,25 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
 
     // 物理的最高速以上のときは、モータの最高速に丸める
     bool rotation_clamp_logic =
-        true;  // 回転成分を優先した丸めアルゴリズムを有効化
+        false;  // 回転成分を優先した丸めアルゴリズムを有効化
     if (rotation_clamp_logic) {
       // 回転成分を優先して残し、直進方向を減らす方法で速度上限以上の速度を丸める
       clamped_rpm = RpmUtils::clampRpmRotationPriority(reciev_rpm, max_rpm);
     } else {
       clamped_rpm = RpmUtils::clampRpmSimple(reciev_rpm, max_rpm);
     }
-
-    motorController->setRPM(clamped_rpm.left, clamped_rpm.right);
-    Log.trace("RPM set: L=%.2f R=%.2f\n", clamped_rpm.left, clamped_rpm.right);
-
+    motorController->setRPM(reciev_rpm.left, reciev_rpm.right);
+    // motorController->setRPM(clamped_rpm.left, clamped_rpm.right);
+    // Log.trace("RPM set: L=%d R=%d\n", (int)(reciev_rpm.left),
+    //           (int)(reciev_rpm.right));
+    // Log.trace("encoders: L=%d R=%d\n", (int)(motorController->getEncoderCountLeft()),
+    //           (int)(motorController->getEncoderCountRight()));
     // モータに指令値を無事セットできたら、通信失敗カウンタをリセット
     COM_FAIL_COUNT = 0;
   } else {
     if (motorController) { motorController->stopMotor(); }
-    Log.errorln("Motor command not set: invalid size or motorController is null");
+    Log.errorln(
+        "Motor command not set: invalid size or motorController is null");
   }
 }
 
@@ -116,7 +127,8 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
 
   if (recv_checksum != calc_checksum) {
     // パケット整合性チェック失敗
-    Log.errorln("Checksum mismatch (recv: 0x%04X, calc: 0x%04X)", recv_checksum, calc_checksum);
+    Log.errorln("Checksum mismatch (recv: 0x%04X, calc: 0x%04X)", recv_checksum,
+                calc_checksum);
   } else {
     set_motor_cmd_binary(tempBuffer, size, max_rpm);
     Log.traceln("Motor command processed");
@@ -171,17 +183,33 @@ void setup() {
   Log.infoln("Using Generic Motor Controller");
   // 一般的なDCモータ+エンコーダを使用
   // ピン番号は実際のハードウェアに合わせて変更してください
-  // motorController = new GenericMotorController(
-  //   2,  // left_pwm_pin
-  //   3,  // left_dir_pin
-  //   4,  // left_enc_a_pin
-  //   5,  // left_enc_b_pin
-  //   6,  // right_pwm_pin
-  //   7,  // right_dir_pin
-  //   8,  // right_enc_a_pin
-  //   9,  // right_enc_b_pin
-  //   100.0  // max_rpm
-  // );
+  auto* genericMotor = new GenericMotorController(D11,    // left_pwm_pin
+                                                  D10,    // left_dir_pin
+                                                  5,      // left_enc_a_pin
+                                                  6,      // left_enc_b_pin
+                                                  D12,    // right_pwm_pin
+                                                  D13,    // right_dir_pin
+                                                  7,      // right_enc_a_pin
+                                                  8,      // right_enc_b_pin
+                                                  300.0f  // 仮の最大RPM
+  );
+  GenericMotorController::DriverConfig motor_config{};
+  motor_config.mechanical_ppr = 13.0f;
+  motor_config.gear_ratio = 45.0f;
+  motor_config.control_interval_us = 1000;
+  motor_config.invert_direction = false;
+  motor_config.pid_kp = 6.0f;
+  motor_config.pid_ki = 4.0f;
+  motor_config.pid_kd = 0.0f;
+  motor_config.pwm_frequency_hz = 100000;
+  motor_config.max_duty = 1.0f;
+  motor_config.deadband = 0.05f;
+  motor_config.max_rpm = 300.0f;
+  motor_config.feedforward_gain = 1.0f;
+  motor_config.velocity_alpha = 0.3f;
+
+  genericMotor->applyDriverConfigSymmetric(motor_config);
+  motorController = genericMotor;
 #endif
 
   if (motorController) {
@@ -205,6 +233,11 @@ void setup() {
 void loop() {
   current_time = micros();
 
+  if (current_time - prev_time_1ms > 1000) {
+    job_1ms();
+    prev_time_1ms = current_time;
+  }
+
   if (current_time - prev_time_10ms > 10000) {
     job_10ms();
     prev_time_10ms = current_time;
@@ -225,4 +258,11 @@ void loop() {
 
   // 受信バッファのオーバーフローチェック
   if (packetSerial.overflow()) { Log.errorln("PacketSerial overflow!"); }
+  // static int count = 0;
+  // count++;
+  // float rpm = sin(count / 180.0f) * 300.0f;
+  // long encoder_L = motorController->getEncoderCountLeft();
+  // // Log.infoln("Setting RPM: %s encoder:%d", String(rpm, 2).c_str(),
+  // encoder_L); Serial2.printf("Setting RPM: %.2f\tencoder:%d\n", rpm,
+  // encoder_L); motorController->setRPM(rpm, rpm); job_1ms(); delay(1);
 }
