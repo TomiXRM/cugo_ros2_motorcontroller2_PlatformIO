@@ -24,21 +24,6 @@ IMotorController* motorController = nullptr;
 unsigned long long current_time = 0, prev_time_1ms, prev_time_10ms = 0,
                    prev_time_100ms, prev_time_1000ms;
 
-ControlledDrv8833Config motor_config = {
-    .in1_pin = 10,
-    .in2_pin = 11,
-    .enc_a_pin = 5,
-    .enc_b_pin = 6,
-    .pwm_frequency = 20000,
-    .invert_direction = true,
-    .pid_compute_interval_us = 1000,
-    .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
-    .pid_ki = 0.05f,  // 積分項も調整
-    .pid_kd = 0.0f,
-};
-
-ControlledDrv8833 motor(motor_config);
-
 // FAIL SAFE COUNT
 int COM_FAIL_COUNT = 0;
 
@@ -107,13 +92,7 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
     } else {
       clamped_rpm = RpmUtils::clampRpmSimple(reciev_rpm, max_rpm);
     }
-    motorController->setRPM(reciev_rpm.left, reciev_rpm.right);
-    // motorController->setRPM(clamped_rpm.left, clamped_rpm.right);
-    // Log.trace("RPM set: L=%d R=%d\n", (int)(reciev_rpm.left),
-    //           (int)(reciev_rpm.right));
-    // Log.trace("encoders: L=%d R=%d\n",
-    // (int)(motorController->getEncoderCountLeft()),
-    //           (int)(motorController->getEncoderCountRight()));
+    motorController->setRPM(clamped_rpm.left, clamped_rpm.right);
     // モータに指令値を無事セットできたら、通信失敗カウンタをリセット
     COM_FAIL_COUNT = 0;
   } else {
@@ -199,35 +178,35 @@ void setup() {
   motorController = new CugoMotorController(0);  // 0: V4, 1: V3i
 #else
   Log.infoln("Using Generic Motor Controller");
-  // 一般的なDCモータ+エンコーダを使用
-  // ピン番号は実際のハードウェアに合わせて変更してください
-  // auto* genericMotor = new GenericMotorController(D11,    // left_pwm_pin
-  //                                                 D10,    // left_dir_pin
-  //                                                 5,      // left_enc_a_pin
-  //                                                 6,      // left_enc_b_pin
-  //                                                 D12,    // right_pwm_pin
-  //                                                 D13,    // right_dir_pin
-  //                                                 7,      // right_enc_a_pin
-  //                                                 8,      // right_enc_b_pin
-  //                                                 300.0f  // 仮の最大RPM
-  // );
-  // GenericMotorController::DriverConfig motor_config{};
-  // motor_config.mechanical_ppr = 13.0f;
-  // motor_config.gear_ratio = 45.0f;
-  // motor_config.control_interval_us = 1000;
-  // motor_config.invert_direction = false;
-  // motor_config.pid_kp = 6.0f;
-  // motor_config.pid_ki = 4.0f;
-  // motor_config.pid_kd = 0.0f;
-  // motor_config.pwm_frequency_hz = 100000;
-  // motor_config.max_duty = 1.0f;
-  // motor_config.deadband = 0.05f;
-  // motor_config.max_rpm = 300.0f;
-  // motor_config.feedforward_gain = 1.0f;
-  // motor_config.velocity_alpha = 0.3f;
+  ControlledDrv8833Config motor_config_left = {
+      .in1_pin = 10,
+      .in2_pin = 11,
+      .enc_a_pin = 5,
+      .enc_b_pin = 6,
+      .pwm_frequency = 20000,
+      .invert_direction = true,
+      .pid_compute_interval_us = 1000,
+      .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
+      .pid_ki = 0.05f,  // 積分項も調整
+      .pid_kd = 0.0f,
+  };
 
-  // genericMotor->applyDriverConfigSymmetric(motor_config);
-  // motorController = genericMotor;
+  ControlledDrv8833Config motor_config_right = {
+      .in1_pin = 12,
+      .in2_pin = 13,
+      .enc_a_pin = 7,
+      .enc_b_pin = 8,
+      .pwm_frequency = 20000,
+      .invert_direction = false,
+      .pid_compute_interval_us = 1000,
+      .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
+      .pid_ki = 0.05f,  // 積分項も調整
+      .pid_kd = 0.0f,
+  };
+
+  // TODO: GenericMotorControllerの宣言
+  motorController =
+      new GenericMotorController(motor_config_left, motor_config_right);
 #endif
 
   if (motorController) {
@@ -236,66 +215,40 @@ void setup() {
   }
 
   // PacketSerial初期化
-  // packetSerial.begin(115200);
-  // packetSerial.setStream(&Serial);
-  // packetSerial.setPacketHandler(&onSerialPacketReceived);
+  packetSerial.begin(115200);
+  packetSerial.setStream(&Serial);
+  packetSerial.setPacketHandler(&onSerialPacketReceived);
   Log.infoln("PacketSerial initialized");
 
   // Serialバッファをカラにしてから実行を開始する
   delay(100);
   while (Serial.available() > 0) { Serial.read(); }
-  motor.init();
   Log.noticeln("Setup completed");
 }
 
 void loop() {
-  static int c = 0;
-  c++;
-  if (c % 1000 == 0) {
-    motor.setTargetRpm(0);
-  } else if (c % 1000 == 500) {
-    motor.setTargetRpm(200);
+  current_time = micros();
+
+  if (current_time - prev_time_1ms > 1000) {
+    job_1ms();
+    prev_time_1ms = current_time;
   }
-  // motor.run(sin((float)c / 720.f));
-  // motor.setTargetRpm(sin((float)c / 720.f) * 300.0f);
 
-  float out = motor.runControlLoop();
-  delay(1);
-  // Serial2.printf("Encoder RPM: %.2f   Output: %.2f\n",
-  // motor.getEncoderRpm(),
-  //                out);
-  // current_time = micros();
+  if (current_time - prev_time_10ms > 10000) {
+    job_10ms();
+    prev_time_10ms = current_time;
+  }
 
-  // if (current_time - prev_time_1ms > 1000) {
-  //   job_1ms();
-  //   prev_time_1ms = current_time;
-  // }
+  if (current_time - prev_time_100ms > 100000) {
+    job_100ms();
+    prev_time_100ms = current_time;
+  }
 
-  // if (current_time - prev_time_10ms > 10000) {
-  //   job_10ms();
-  //   prev_time_10ms = current_time;
-  // }
+  if (current_time - prev_time_1000ms > 1000000) {
+    job_1000ms();
+    prev_time_1000ms = current_time;
+  }
 
-  // if (current_time - prev_time_100ms > 100000) {
-  //   job_100ms();
-  //   prev_time_100ms = current_time;
-  // }
-
-  // if (current_time - prev_time_1000ms > 1000000) {
-  //   job_1000ms();
-  //   prev_time_1000ms = current_time;
-  // }
-
-  // // シリアル通信でコマンドを受信
-  // packetSerial.update();
-
-  // // 受信バッファのオーバーフローチェック
-  // if (packetSerial.overflow()) { Log.errorln("PacketSerial overflow!"); }
-  // static int count = 0;
-  // count++;
-  // float rpm = sin(count / 180.0f) * 300.0f;
-  // long encoder_L = motorController->getEncoderCountLeft();
-  // // Log.infoln("Setting RPM: %s encoder:%d", String(rpm, 2).c_str(),
-  // encoder_L); Serial2.printf("Setting RPM: %.2f\tencoder:%d\n", rpm,
-  // encoder_L); motorController->setRPM(rpm, rpm); job_1ms(); delay(1);
+  // シリアル通信でコマンドを受信
+  packetSerial.update();
 }

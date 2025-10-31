@@ -46,16 +46,25 @@ void PID::compute() {
         t.reset();
         // please append error before compute
         float _error = error;
-        integral += (abs(_output) > limit ? 0 : _error * dt); // アンチワインドアップ
 
+        // P項とD項を計算
         pTerm = p * _error;                    // 比例
-        iTerm = i * integral;                  // 積分
         dTerm = d * (_error - lastError) / dt; // 微分
         lastError = _error;
 
+        // 積分を仮計算
+        float proposed_integral = integral + _error * dt;
+        iTerm = i * proposed_integral;
+
+        // PID出力を計算
         _output = (pTerm + iTerm + dTerm);
         output = constrain(_output, min, max);
-        // pc->printf("p:%f i:%f d:%f Output: %f _out:%f\n", pTerm, iTerm, dTerm, output, _output);
+
+        // アンチワインドアップ: 出力が飽和していない場合のみ積分を更新
+        if (output == _output) {
+            integral = proposed_integral;
+        }
+        // 飽和している場合は積分を更新しない（コンディショナルインテグレーション）
     }
 }
 float PID::getPID() {
