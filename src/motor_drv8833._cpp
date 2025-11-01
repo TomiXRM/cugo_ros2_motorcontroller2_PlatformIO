@@ -1,0 +1,132 @@
+// ==== One-Wheel PI Control + Odometry (RP2040 + PIO Quadrature) ====
+// 依存: gbr1/rp2040-encoder-library（Arduinoライブラリマネージャ）
+// 配線: Encoder CHA=GPIO2, CHB=GPIO3 (連番必須) / モータ PWM=GPIO6, DIR=GPIO8 など
+#include "Arduino.h"
+#include "pio_encoder.h"
+
+// ---------- ユーザ設定 ----------
+constexpr uint8_t ENC_A_PIN = D5;   // Aピン（Bは自動で A+1 を使用）
+constexpr uint8_t DIR_PIN   = D10;   // モータ回転方向
+constexpr uint8_t PWM_PIN   = D11;   // モータPWM（要:対応ピン）
+constexpr uint32_t PWM_FREQ = 100 * 1000; // 100KHz
+
+// エンコーダ仕様
+constexpr float ENC_PPR_MECH = 13.0f;   // 根本エンコーダの物理PPR（例）
+constexpr float GEAR_RATIO   = 45.0f;   // 1:45
+constexpr float TICKS_PER_REV = ENC_PPR_MECH * 4.0f * GEAR_RATIO; // x4逓倍後の車軸1回転あたりカウント
+
+// 車輪・制御仕様
+constexpr float WHEEL_RADIUS = 67.0/2*0.001;   // [m] 例: 直径100mm
+constexpr float DT           = 0.001f;  // [s] 制御周期=1kHz
+constexpr float V_TARGET     = 1.00f;   // [m/s] 目標速度（必要に応じて変更）
+
+// PIゲイン（まずは控えめ）
+constexpr float KP = 6.0f;
+constexpr float KI = 4.0f;
+
+// 出力制限とデッドバンド
+constexpr int   PWM_MIN = 0;
+constexpr int   PWM_MAX = 255;
+
+// 速度ローパス（任意、小さな揺れを抑える）
+constexpr float VEL_ALPHA = 0.25f; // 0(なし)〜1(強い平滑)
+
+// ---------- 内部状態 ----------
+PioEncoder enc(ENC_A_PIN);
+
+volatile int32_t last_count = 0;
+float integral = 0.0f;
+float v_meas = 0.0f;      // 平滑済みの実測速度[m/s]
+float dist_sum = 0.0f;    // 移動距離[m]
+
+unsigned long last_us = 0;
+unsigned long last_print = 0;
+
+static void driveMotor(float value){
+  if (value < 0) {
+    digitalWrite(DIR_PIN, 1);
+    analogWrite(PWM_PIN, PWM_MAX * value + PWM_MAX);
+  } else {
+    digitalWrite(DIR_PIN, 0);
+    analogWrite(PWM_PIN, PWM_MAX * value);
+  }
+}
+
+void setup() {
+  pinMode(PWM_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  analogWriteFreq(PWM_FREQ);
+  driveMotor(0.0f);
+
+  Serial.begin(115200);
+  while (!Serial) { ; }
+
+  enc.begin();          // PIOカウンタ開始
+  last_count = enc.getCount();
+
+  last_us = micros();
+  last_print = millis();
+
+  // Philhowerコア: analogWrite()は標準でOK（周波数調整したい場合はcoreのAPIで設定可）
+  Serial.println("One-wheel PI control start.");
+}
+
+void loop() {
+  // ---- 1kHz固定周期ループ ----
+  unsigned long now_us = micros();
+  if (now_us - last_us < (unsigned long)(DT * 1e6)) return;
+  last_us += (unsigned long)(DT * 1e6);
+
+  // エンコーダ差分取得
+  int32_t c = enc.getCount();
+  int32_t dcount = c - last_count;
+  last_count = c;
+
+  // 速度[m/s]計算: d(count)->d(rev)->d(theta)->d(s)
+  // rev/s = dcount / TICKS_PER_REV / DT
+  // 周長 = 2πR → v = rev/s * 2πR
+  float v_inst = (dcount / TICKS_PER_REV) / DT * (2.0f * PI * WHEEL_RADIUS);
+
+  // ローパス（任意）
+  v_meas = VEL_ALPHA * v_inst + (1.0f - VEL_ALPHA) * v_meas;
+
+  // 位置（距離）更新
+  float ds = (dcount / TICKS_PER_REV) * (2.0f * PI * WHEEL_RADIUS);
+  dist_sum += ds;
+
+  // 目標（正転）: V_TARGET[m/s]
+  // float v_ref = V_TARGET;
+  static int count = 0;
+  count ++;
+  float v_ref = 1.5 * sin(float(count) * 3.14 / 720);
+
+  // PI制御
+  float e = v_ref - v_meas;
+  integral += e * DT;
+
+  // 出力（-1.0〜+1.0相当に正規化）
+  // ここでは簡易的に、最大速度を仮に1.5m/s程度とみなしてスケール
+  // 必要に応じて実機計測に合わせてスケーリングしてください
+  const float V_SCALE = 1.5f; // [m/s] ≒ 出力1.0相当の速度
+  float u = (KP * e + KI * integral) / V_SCALE;
+
+  // クリップ + 簡易アンチワインドアップ
+  if (u > 1.0f) { u = 1.0f; integral -= e * DT * 0.5f; }
+  if (u < -1.0f){ u = -1.0f; integral -= e * DT * 0.5f; }
+
+  driveMotor(u);
+  
+  // count ++;
+  // float va = sin(float(count) * 3.14 / 180);
+  // driveMotor(va);
+  // delay(2);
+
+  // デバッグ出力（20Hz）
+  if (millis() - last_print >= 50) {
+    last_print = millis();
+    Serial.print("v_ref[m/s]:");  Serial.print(v_ref, 3);
+    Serial.print("  v_meas:");    Serial.print(v_meas, 3);
+    Serial.print("  u:");         Serial.print(u, 3);
+    Serial.print("  dist[m]:");   Serial.println(dist_sum, 3);
+  }
+}
