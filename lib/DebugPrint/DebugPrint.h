@@ -15,10 +15,16 @@
 #define DEBUG_SERIAL Serial2
 #define DEBUG_BAUD 115200
 
-// Arduino Logラッパーマクロ
+#define DEBUG_PRINTF(fmt, ...) DEBUG_SERIAL.printf(fmt, ##__VA_ARGS__)
+#define DEBUG_NOTICE(fmt, ...) DEBUG_SERIAL.printf("[NOTICE] " fmt, ##__VA_ARGS__)
+#define DEBUG_INFO(fmt, ...) DEBUG_SERIAL.printf("[INFO] " fmt, ##__VA_ARGS__)
+#define DEBUG_TRACE(fmt, ...) DEBUG_SERIAL.printf("[TRACE] " fmt, ##__VA_ARGS__)
+#define DEBUG_WARNING(fmt, ...) DEBUG_SERIAL.printf("[WARNING] " fmt, ##__VA_ARGS__)
+#define DEBUG_ERROR(fmt, ...) DEBUG_SERIAL.printf("[ERROR] " fmt, ##__VA_ARGS__)
+
+// Arduino Logラッパーマクロ（後方互換性のため残す）
 #define DEBUG_PRINT(x) Log.notice(x)
 #define DEBUG_PRINTLN(x) Log.noticeln(x)
-#define DEBUG_PRINTF(fmt, ...) Log.notice(fmt, ##__VA_ARGS__)
 
 // 初期化関数
 inline void debugInit() {
@@ -40,6 +46,11 @@ inline void debugInit() {
 #define DEBUG_PRINT(x)
 #define DEBUG_PRINTLN(x)
 #define DEBUG_PRINTF(fmt, ...)
+#define DEBUG_NOTICE(fmt, ...)
+#define DEBUG_INFO(fmt, ...)
+#define DEBUG_TRACE(fmt, ...)
+#define DEBUG_WARNING(fmt, ...)
+#define DEBUG_ERROR(fmt, ...)
 inline void debugInit() {}
 #endif
 

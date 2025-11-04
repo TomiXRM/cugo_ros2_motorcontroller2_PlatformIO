@@ -34,7 +34,7 @@ int COM_FAIL_COUNT = 0;
 void stop_motor_immediately() {
   if (motorController) {
     motorController->stopMotor();
-    Log.warningln("Motor stopped (failsafe triggered)");
+    DEBUG_WARNING("Motor stopped (failsafe triggered)\n");
   }
 }
 
@@ -97,8 +97,7 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
     COM_FAIL_COUNT = 0;
   } else {
     if (motorController) { motorController->stopMotor(); }
-    Log.errorln(
-        "Motor command not set: invalid size or motorController is null");
+    DEBUG_ERROR("Motor command not set: invalid size or motorController is null\n");
   }
 }
 
@@ -124,11 +123,11 @@ void onSerialPacketReceived(const uint8_t* buffer, size_t size) {
 
   if (recv_checksum != calc_checksum) {
     // パケット整合性チェック失敗
-    Log.errorln("Checksum mismatch (recv: 0x%04X, calc: 0x%04X)", recv_checksum,
-                calc_checksum);
+    DEBUG_ERROR("Checksum mismatch (recv: 0x%04X, calc: 0x%04X)\n",
+                recv_checksum, calc_checksum);
   } else {
     set_motor_cmd_binary(tempBuffer, size, max_rpm);
-    Log.traceln("Motor command processed");
+    DEBUG_TRACE("Motor command processed\n");
   }
 
   // 送信ボディの作成
@@ -170,30 +169,17 @@ void setup() {
 
   // デバッグシリアル初期化
   debugInit();
-  Log.noticeln("=== Cugo Motor Controller Started ===");
+  DEBUG_NOTICE("=== Cugo Motor Controller Started ===\n");
 
 #ifdef USE_CUGO_SDK
-  Log.infoln("Using CugoSDK");
+  DEBUG_INFO("Using CugoSDK\n");
   // CugoSDKを使用
   motorController = new CugoMotorController(0);  // 0: V4, 1: V3i
 #else
-  Log.infoln("Using Generic Motor Controller");
+  DEBUG_INFO("Using Generic Motor Controller\n");
   ControlledDrv8833Config motor_config_left = {
-      .in1_pin = 10,
-      .in2_pin = 11,
-      .enc_a_pin = 5,
-      .enc_b_pin = 6,
-      .pwm_frequency = 20000,
-      .invert_direction = true,
-      .pid_compute_interval_us = 1000,
-      .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
-      .pid_ki = 0.05f,  // 積分項も調整
-      .pid_kd = 0.0f,
-  };
-
-  ControlledDrv8833Config motor_config_right = {
-      .in1_pin = 12,
-      .in2_pin = 13,
+      .in1_pin = 5,
+      .in2_pin = 6,
       .enc_a_pin = 7,
       .enc_b_pin = 8,
       .pwm_frequency = 20000,
@@ -204,26 +190,38 @@ void setup() {
       .pid_kd = 0.0f,
   };
 
-  // TODO: GenericMotorControllerの宣言
+  ControlledDrv8833Config motor_config_right = {
+      .in1_pin = 3,
+      .in2_pin = 4,
+      .enc_a_pin = 9,
+      .enc_b_pin = 10,
+      .pwm_frequency = 20000,
+      .invert_direction = true,
+      .pid_compute_interval_us = 1000,
+      .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
+      .pid_ki = 0.05f,  // 積分項も調整
+      .pid_kd = 0.0f,
+  };
+
   motorController =
       new GenericMotorController(motor_config_left, motor_config_right);
 #endif
 
   if (motorController) {
     motorController->init();
-    Log.infoln("Motor controller initialized");
+    DEBUG_INFO("Motor controller initialized\n");
   }
 
   // PacketSerial初期化
   packetSerial.begin(115200);
   packetSerial.setStream(&Serial);
   packetSerial.setPacketHandler(&onSerialPacketReceived);
-  Log.infoln("PacketSerial initialized");
+  DEBUG_INFO("PacketSerial initialized\n");
 
   // Serialバッファをカラにしてから実行を開始する
   delay(100);
   while (Serial.available() > 0) { Serial.read(); }
-  Log.noticeln("Setup completed");
+  DEBUG_NOTICE("Setup completed\n");
 }
 
 void loop() {
