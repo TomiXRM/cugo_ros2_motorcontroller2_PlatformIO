@@ -95,9 +95,9 @@ classDiagram
     }
 
     class GenericMotorController {
-        -GenericMotorDriver left_driver_
-        -GenericMotorDriver right_driver_
-        +GenericMotorController(pins...)
+        -ControlledDrv8833 left_driver_
+        -ControlledDrv8833 right_driver_
+        +GenericMotorController(left_config, right_config)
         +init() void
         +setRPM(left_rpm, right_rpm) void
         +stopMotor() void
@@ -105,8 +105,8 @@ classDiagram
         +getEncoderCountRight() long
         +update() void
         +getMaxRPM() float
-        +applyDriverConfigs(left_cfg, right_cfg) void
-        +applyDriverConfigSymmetric(cfg) void
+        +getEncoderRpmLeft() float
+        +getEncoderRpmRight() float
     }
 
     class CugoSDK {
@@ -118,23 +118,37 @@ classDiagram
         +cugo_current_count_R long
     }
 
-    class ArduinoLog {
+    class DebugPrint {
         <<library>>
-        +Log.notice(message) void
-        +Log.noticeln(message) void
-        +Log.notice(fmt, ...) void
+        +DEBUG_PRINTF(fmt, ...) void
+        +DEBUG_NOTICE(fmt, ...) void
+        +DEBUG_INFO(fmt, ...) void
+        +DEBUG_TRACE(fmt, ...) void
+        +DEBUG_WARNING(fmt, ...) void
+        +DEBUG_ERROR(fmt, ...) void
         +debugInit() void
     }
 
-    class GenericMotorDriver {
-        <<library>>
+    class ControlledDrv8833 {
+        -PioEncoder encoder_
+        -PID pid_vel
+        -float encoder_scale_factor_
+        +ControlledDrv8833(config)
         +init() void
-        +setTargetRPM(rpm) void
-        +update() void
+        +setTargetRpm(rpm) void
+        +runControlLoop() float
+        +getEncoderRpm() float
+        +getEncoderCount() int32_t
+        +getEncoderIncrement() int32_t
         +stop() void
-        +applyConfig(config) void
-        +setPwmFrequency(freq) void
-        +setMaxRPM(rpm) void
+        +resetPid() void
+    }
+
+    class RpmUtils {
+        <<utility>>
+        +clampRpmSimple(target, max) MotorRPM
+        +clampRpmRotationPriority(target, max) MotorRPM
+        +getMaxRpm(product_id, controller) float
     }
 
     class Main {
@@ -147,20 +161,20 @@ classDiagram
         +set_motor_cmd_binary(buf, size, max_rpm) void
         +stop_motor_immediately() void
         +check_failsafe() void
+        +job_1ms() void
         +job_10ms() void
         +job_100ms() void
         +job_1000ms() void
-        +clamp_rpm_simple(target, max) MotorRPM
-        +clamp_rpm_rotation_priority(target, max) MotorRPM
-        +check_max_rpm(product_id) float
     }
 
     IMotorController <|.. CugoMotorController : implements
     IMotorController <|.. GenericMotorController : implements
     CugoMotorController --> CugoSDK : uses
     Main --> IMotorController : uses
-    Main --> ArduinoLog : uses
-    GenericMotorController --> GenericMotorDriver : uses
+    Main --> DebugPrint : uses
+    Main --> RpmUtils : uses
+    GenericMotorController --> ControlledDrv8833 : uses
+    ControlledDrv8833 --> PID : uses
 ```
 
 ### クラスの役割
@@ -182,11 +196,19 @@ CugoSDKを使用したモーター制御の実装。既存のCugo専用モータ
 
 #### `GenericMotorController`
 
-一般的なDCモーター + インクリメンタルエンコーダーを使用した実装。左右それぞれのホイールを`GenericMotorDriver`インスタンスに委譲し、インターフェイス適合と設定値の受け渡しに専念する。`applyDriverConfigs()`や`applyDriverConfigSymmetric()`で左右の構成値を一括設定できる。
+一般的なDCモーター + インクリメンタルエンコーダーを使用した実装。左右それぞれのホイールを`ControlledDrv8833`インスタンスに委譲し、インターフェイス適合とモーター制御を行う。コンストラクタで左右のモーター設定を個別に指定できる。
 
-#### `GenericMotorDriver`
+#### `ControlledDrv8833`
 
-汎用DCモータ向けのドライバ。PIOエンコーダを用いた速度計測とPIDベースの制御ループを実装し、左右ホイール双方のPWM・方向制御を担う。`DriverConfig`でPPR・ギヤ比・制御周期・正逆転設定を一括適用できる。
+DRV8833モータードライバを使用したPID制御付きDCモーター制御クラス。PIOエンコーダを用いた速度計測とPIDベースの制御ループを実装。`ControlledDrv8833Config`でエンコーダーPPR、ギヤ比、ホイール直径、PID係数、エンコーダースケーリング等を設定可能。エンコーダーカウント値のスケーリング機能により、上位コンピュータが期待する単位系に自動変換できる。
+
+#### `DebugPrint`
+
+デバッグ出力のラッパークラス。Serial2（UART1）を使用してデバッグメッセージを出力。`DEBUG_PRINTF`, `DEBUG_NOTICE`, `DEBUG_INFO`, `DEBUG_TRACE`, `DEBUG_WARNING`, `DEBUG_ERROR`マクロを提供し、float値の出力に対応。`DEBUG_ENABLED`フラグで全デバッグ出力の有効/無効を切り替え可能。
+
+#### `RpmUtils`
+
+RPM計算とクランプ処理のユーティリティクラス。`clampRpmSimple()`で単純な上限制限、`clampRpmRotationPriority()`で回転成分を優先した制限を行う。`getMaxRpm()`でプロダクトIDに基づく最大RPMを取得。
 
 #### `Main` (main.cpp)
 
@@ -249,11 +271,18 @@ sequenceDiagram
 
 メインループ内で実行される周期タスクは、`micros()`で取得した現在時刻と前回実行時刻の差分により、それぞれ独立した周期で動作します。
 
+### 1ms周期タスク (`job_1ms()`)
+
+**現在の実装**:
+- **汎用DCモータ使用時**: `motorController->update()` でPID制御ループを実行
+
+**用途**: 高速制御ループ（PID制御）
+
 ### 10ms周期タスク (`job_10ms()`)
 
 **現在の実装**: 未使用
 
-**用途**: 将来の拡張用（高速制御ループなど）
+**用途**: 将来の拡張用
 
 ### 100ms周期タスク (`job_100ms()`)
 
@@ -266,7 +295,7 @@ sequenceDiagram
 
 2. **モーターコントローラー更新** (`motorController->update()`)
    - **CugoSDK使用時**: `ld2_get_cmd()` でエンコーダーデータを取得
-   - **汎用DCモータ使用時**: `updatePID()` でPID制御による速度フィードバック
+   - **汎用DCモータ使用時**: 1ms周期タスクでPID制御を実行しているため、100ms周期では何もしない
 
 ### 1000ms周期タスク (`job_1000ms()`)
 
@@ -304,12 +333,16 @@ graph TB
 
         subgraph "Hardware Abstraction"
             CugoSDK[CugoSDK<br/>- LD2 Protocol<br/>- Serial1 (UART0)]
-            GenericDriver[GenericMotorDriver<br/>- PID Control<br/>- PIO Encoders]
+            ControlledDrv[ControlledDrv8833<br/>- PID Control<br/>- PIO Encoders<br/>- Encoder Scaling]
             GPIO[GPIO/PWM<br/>- Motor PWM<br/>- Encoder INT]
         end
 
         subgraph "Debug Layer"
-            ArduinoLog[ArduinoLog<br/>Serial2 (UART1) Debug Output]
+            DebugPrint[DebugPrint<br/>Serial2 (UART1) Debug Output]
+        end
+
+        subgraph "Utility Layer"
+            RpmUtils[RpmUtils<br/>RPM Clamping]
         end
 
         subgraph "Communication"
@@ -326,24 +359,25 @@ graph TB
 
     MainCpp --> IMotor
     MainCpp --> PacketSerial
-    MainCpp --> ArduinoLog
+    MainCpp --> DebugPrint
+    MainCpp --> RpmUtils
 
     IMotor -.-> CugoImpl
     IMotor -.-> GenericImpl
 
     CugoImpl --> CugoSDK
-    GenericImpl --> GenericDriver
-    GenericDriver --> GPIO
+    GenericImpl --> ControlledDrv
+    ControlledDrv --> GPIO
 
     PacketSerial <--> ROS2
     CugoSDK <--> LD2
     GPIO <--> DCMotor
-    ArduinoLog --> DebugPC
+    DebugPrint --> DebugPC
 
     style IMotor fill:#ff9,stroke:#333,stroke-width:3px
     style CugoImpl fill:#9f9
     style GenericImpl fill:#9f9
-    style GenericDriver fill:#9ff
+    style ControlledDrv fill:#9ff
 ```
 
 ### レイヤーの説明
@@ -456,12 +490,21 @@ graph LR
 
 #### モーターシステムB: 汎用
 
-- **GPIO 2, 3**: 左モーター PWM/DIR
-- **GPIO 6, 7**: 右モーター PWM/DIR
-- **GPIO 4, 5**: 左エンコーダー A/B相
-- **GPIO 8, 9**: 右エンコーダー A/B相
+デフォルト設定（main.cppで変更可能）:
+
+- **GPIO 5, 6**: 左モーター PWM (IN1/IN2)
+- **GPIO 3, 4**: 右モーター PWM (IN1/IN2)
+- **GPIO 7, 8**: 左エンコーダー A/B相
+- **GPIO 9, 10**: 右エンコーダー A/B相
 
 ※ピン番号は実際のハードウェアに合わせて変更してください
+
+**エンコーダースケーリング機能**:
+
+`ControlledDrv8833Config`で以下を設定することで、エンコーダーカウント値を上位コンピュータが期待する単位系に自動変換できます:
+
+- `wheel_diameter_mm`: ホイール直径 [mm]
+- `desired_distance_per_count_mm`: 期待する1カウントあたりの移動量 [mm]
 
 ---
 

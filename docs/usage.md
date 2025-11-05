@@ -133,47 +133,72 @@ motorController = new CugoMotorController(0);  // V4の場合
 #include "GenericMotorController.h"  // コメント解除
 ```
 
-#### 2. ピン番号の設定
+#### 2. ピン番号とパラメータの設定
 
-`setup()`関数内で、実際のハードウェアに合わせてピン番号を設定：
+`setup()`関数内で、実際のハードウェアに合わせて設定：
 
 ```cpp
 #else
-  Log.infoln("Using Generic Motor Controller");
-  auto* genericMotor = new GenericMotorController(
-    2,  // left_pwm_pin - 左モーターPWMピン
-    3,  // left_dir_pin - 左モーター方向ピン
-    4,  // left_enc_a_pin - 左エンコーダーA相
-    5,  // left_enc_b_pin - 左エンコーダーB相
-    6,  // right_pwm_pin - 右モーターPWMピン
-    7,  // right_dir_pin - 右モーター方向ピン
-    8,  // right_enc_a_pin - 右エンコーダーA相
-    9,  // right_enc_b_pin - 右エンコーダーB相
-    300.0f  // max_rpm - 想定最大RPM
-  );
-  GenericMotorController::DriverConfig config{};
-  config.mechanical_ppr = 13.0f;
-  config.gear_ratio = 45.0f;
-  config.control_interval_us = 1000;  // 制御周期(us)
-  config.invert_direction = false;
-  config.pid_kp = 6.0f;
-  config.pid_ki = 4.0f;
-  config.pid_kd = 0.0f;
-  config.pwm_frequency_hz = 100000;   // 100kHz
-  config.max_duty = 1.0f;
-  config.deadband = 0.05f;
-  config.max_rpm = 300.0f;
-  config.feedforward_gain = 1.0f;
-  config.velocity_alpha = 0.3f;
+  DEBUG_INFO("Using Generic Motor Controller\n");
+  ControlledDrv8833Config motor_config_left = {
+      .in1_pin = 5,
+      .in2_pin = 6,
+      .enc_a_pin = 7,
+      .enc_b_pin = 8,
+      .pwm_frequency = 20000,
+      .invert_direction = false,
+      .enc_ppr = 13.0f,  // エンコーダーのパルス数
+      .gear_ratio = 45.0f,
+      .wheel_diameter_mm = 65.0f,  // ホイール直径
+      .desired_distance_per_count_mm = 0.4f,  // 上位が期待する1カウントあたりの移動量
+      .pid_compute_interval_us = 1000,
+      .pid_kp = 0.05f,
+      .pid_ki = 0.05f,
+      .pid_kd = 0.0f,
+  };
 
-  genericMotor->applyDriverConfigSymmetric(config);
-  motorController = genericMotor;
+  ControlledDrv8833Config motor_config_right = {
+      .in1_pin = 3,
+      .in2_pin = 4,
+      .enc_a_pin = 9,
+      .enc_b_pin = 10,
+      .pwm_frequency = 20000,
+      .invert_direction = true,
+      .enc_ppr = 13.0f,
+      .gear_ratio = 45.0f,
+      .wheel_diameter_mm = 65.0f,
+      .desired_distance_per_count_mm = 0.4f,
+      .pid_compute_interval_us = 1000,
+      .pid_kp = 0.05f,
+      .pid_ki = 0.05f,
+      .pid_kd = 0.0f,
+  };
+
+  motorController = new GenericMotorController(motor_config_left, motor_config_right);
 #endif
 ```
 
 #### 3. 制御パラメータの調整
 
-`GenericMotorController::DriverConfig`を左右それぞれに適用することで、PPR・ギヤ比・制御周期・正逆転に加え、PIDゲインやPWM設定、デッドバンド、ローパス係数なども一括で渡せます。左右同一構成であれば`applyDriverConfigSymmetric()`を使うと記述が簡潔になります。ログを確認しながら`config.pid_k*`や`config.deadband`、`config.velocity_alpha`などの値を調整してください。
+`ControlledDrv8833Config`で以下のパラメータを設定できます：
+
+**ハードウェア設定:**
+- `in1_pin`, `in2_pin`: DRV8833のPWMピン
+- `enc_a_pin`, `enc_b_pin`: エンコーダーA/B相ピン（連続したGPIO番号を推奨）
+- `pwm_frequency`: PWM周波数 [Hz]（20kHz推奨）
+- `invert_direction`: モーター方向反転フラグ
+
+**機械パラメータ:**
+- `enc_ppr`: エンコーダーのパルス数（1回転あたり）
+- `gear_ratio`: ギヤ比
+- `wheel_diameter_mm`: ホイール直径 [mm]
+- `desired_distance_per_count_mm`: 上位コンピュータが期待する1カウントあたりの移動量 [mm]
+
+**制御パラメータ:**
+- `pid_compute_interval_us`: PID制御周期 [μs]（1000 = 1ms推奨）
+- `pid_kp`, `pid_ki`, `pid_kd`: PIDゲイン（出力範囲-1.0〜1.0に合わせて調整）
+
+デバッグ出力を確認しながら、PIDゲインを調整してください。
 
 ---
 
@@ -214,25 +239,26 @@ motorController = new CugoMotorController(0);  // V4の場合
 - **GP20 (UART1 TX)**: デバッグ出力
 - **USB CDC**: ROS2通信
 
-#### 汎用DCモータ使用時（例）
+#### 汎用DCモータ使用時（デフォルト設定）
 - **GP20 (UART1 TX)**: デバッグ出力
-- **GP2**: 左モーター PWM
-- **GP3**: 左モーター DIR
-- **GP4**: 左エンコーダー A相
-- **GP5**: 左エンコーダー B相
-- **GP6**: 右モーター PWM
-- **GP7**: 右モーター DIR
-- **GP8**: 右エンコーダー A相
-- **GP9**: 右エンコーダー B相
+- **GP5**: 左モーター IN1 (PWM)
+- **GP6**: 左モーター IN2 (PWM)
+- **GP7**: 左エンコーダー A相
+- **GP8**: 左エンコーダー B相
+- **GP3**: 右モーター IN1 (PWM)
+- **GP4**: 右モーター IN2 (PWM)
+- **GP9**: 右エンコーダー A相
+- **GP10**: 右エンコーダー B相
 - **USB CDC**: ROS2通信
 
-※ Serial1(UART0, GP0/GP1)はLD2通信に使用しないため、他の用途に利用可能
+※ Serial1(UART0, GP0/GP1)は使用していないため、他の用途に利用可能
+※ エンコーダーピンは連続したGPIO番号を使用することを推奨（PIOエンコーダーの効率化のため）
 
 ---
 
 ## デバッグログの設定
 
-デバッグログはArduinoLogライブラリ経由で出力します。初期化ロジックは`lib/DebugPrint/DebugPrint.h`にまとめられており、`debugInit()`を呼び出すことでSerial2(UART1)へログを流す設定が行われます。
+デバッグログは`lib/DebugPrint/DebugPrint.h`で定義されたマクロを使用してSerial2(UART1)に出力します。
 
 ### 有効化（デフォルト）
 
@@ -240,7 +266,16 @@ motorController = new CugoMotorController(0);  // V4の場合
 #define DEBUG_ENABLED 1
 ```
 
-`DEBUG_ENABLED`が`1`のとき、`debugInit()`は`Log.begin(LOG_LEVEL_VERBOSE, &Serial2)`を実行し、ログレベルプレフィックスを設定します。`Log.trace()`から`Log.fatalln()`までの呼び出しが利用可能です。
+`DEBUG_ENABLED`が`1`のとき、以下のマクロが使用可能です：
+
+- `DEBUG_PRINTF(fmt, ...)` - プレフィックスなし
+- `DEBUG_NOTICE(fmt, ...)` - [NOTICE] プレフィックス
+- `DEBUG_INFO(fmt, ...)` - [INFO] プレフィックス
+- `DEBUG_TRACE(fmt, ...)` - [TRACE] プレフィックス
+- `DEBUG_WARNING(fmt, ...)` - [WARNING] プレフィックス
+- `DEBUG_ERROR(fmt, ...)` - [ERROR] プレフィックス
+
+これらのマクロは`Serial2.printf()`をラップしており、**float値の出力に対応**しています。
 
 ### 無効化
 
@@ -248,25 +283,28 @@ motorController = new CugoMotorController(0);  // V4の場合
 #define DEBUG_ENABLED 0
 ```
 
-無効化すると`debugInit()`は空実装となり、`Log.*`呼び出しも出力されません（シリアルに何も送信されません）。ファームウェアサイズ削減や通信負荷を抑えたいときに切り替えてください。
+無効化すると全てのマクロが空実装となり、何も出力されません。ファームウェアサイズ削減や通信負荷を抑えたいときに切り替えてください。
 
 ### ログ出力の例
 
 ```cpp
-#include "DebugPrint.h"  // debugInit() と ArduinoLog の初期化を提供
+#include "DebugPrint.h"
 
 void myFunction() {
-  Log.noticeln("Function started");
+  DEBUG_NOTICE("Function started\n");
 
   int value = 42;
-  Log.notice("Value: %d", value);
+  DEBUG_INFO("Value: %d\n", value);
 
   float rpm = 100.5f;
-  Log.traceln("RPM: %.2f", rpm);
+  DEBUG_TRACE("RPM: %.2f\n", rpm);
+
+  // 複数の値を出力
+  DEBUG_INFO("RPM: %.2f, Encoder: %d\n", rpm, value);
 }
 ```
 
-レベルに応じて`Log.errorln()`, `Log.warningln()`, `Log.infoln()`などを使い分けると、シリアルモニタでのフィルタリングが容易になります。改行を付けたい場合は`xxxln()`系、連結して表示したい場合は`xxx()`系のAPIを使用してください。
+レベルに応じてマクロを使い分けると、シリアルモニターでのフィルタリングが容易になります。**必ず改行文字`\n`を含めてください。**
 
 ---
 
@@ -394,8 +432,9 @@ ros2 topic echo /odom
 
 **汎用DCモータ使用時:**
 - エンコーダーの結線を確認（A相、B相、GND、VCC）
-- 割り込みハンドラが正しく呼ばれているか確認
-- `GenericMotorController.cpp`の`encoderISR_*()`をデバッグ
+- PIOエンコーダーが正しく動作しているか確認
+- `ControlledDrv8833.cpp`の`getEncoderCount()`をデバッグ
+- エンコーダースケーリング設定（`wheel_diameter_mm`, `desired_distance_per_count_mm`）を確認
 
 ### 問題: デバッグ出力が表示されない
 
@@ -427,8 +466,8 @@ pio run
 
 ## 次のステップ
 
-- 汎用DCモータ使用時は、PID制御を実装して速度フィードバックを追加
-- エンコーダーから実RPMを計算し、目標RPMに追従させる
+- PIDパラメータを調整して、目標RPMへの追従性能を改善
+- エンコーダースケーリングパラメータを調整して、上位コンピュータとの単位系を合わせる
 - 複数のロボットで同じファームウェアを使用する場合、設定ファイルで切り替えられるように拡張
 
 詳細は[デバッグ方法](debug.md)を参照してください。
