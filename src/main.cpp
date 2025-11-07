@@ -97,7 +97,8 @@ void set_motor_cmd_binary(uint8_t* reciev_buf, int size, float max_rpm) {
     COM_FAIL_COUNT = 0;
   } else {
     if (motorController) { motorController->stopMotor(); }
-    DEBUG_ERROR("Motor command not set: invalid size or motorController is null\n");
+    DEBUG_ERROR(
+        "Motor command not set: invalid size or motorController is null\n");
   }
 }
 
@@ -177,7 +178,20 @@ void setup() {
   motorController = new CugoMotorController(0);  // 0: V4, 1: V3i
 #else
   DEBUG_INFO("Using Generic Motor Controller\n");
-  ControlledDrv8833Config motor_config_left = {
+    ControlledDrv8833Config motor_config_left = {
+      .in1_pin = 3,
+      .in2_pin = 4,
+      .enc_a_pin = 9,
+      .enc_b_pin = 10,
+      .pwm_frequency = 20000,
+      .invert_direction = true,
+      .pid_compute_interval_us = 1000,
+      .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
+      .pid_ki = 0.05f,  // 積分項も調整
+      .pid_kd = 0.0f,
+  };
+
+  ControlledDrv8833Config motor_config_right = {
       .in1_pin = 5,
       .in2_pin = 6,
       .enc_a_pin = 7,
@@ -190,18 +204,7 @@ void setup() {
       .pid_kd = 0.0f,
   };
 
-  ControlledDrv8833Config motor_config_right = {
-      .in1_pin = 3,
-      .in2_pin = 4,
-      .enc_a_pin = 9,
-      .enc_b_pin = 10,
-      .pwm_frequency = 20000,
-      .invert_direction = true,
-      .pid_compute_interval_us = 1000,
-      .pid_kp = 0.05f,  // 出力範囲-1.0〜1.0に合わせて調整
-      .pid_ki = 0.05f,  // 積分項も調整
-      .pid_kd = 0.0f,
-  };
+
 
   motorController =
       new GenericMotorController(motor_config_left, motor_config_right);
